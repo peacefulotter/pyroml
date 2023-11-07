@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name="pyro",
@@ -7,6 +7,7 @@ setup(
     packages=["pyro"],
     description="Machine Learning tool allowing plug-and-play training for pytorch models ",
     license="MIT",
+    packages=find_packages("src", exclude=["tests"]),
     install_requires=[
         "torch",
     ],
