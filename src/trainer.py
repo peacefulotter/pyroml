@@ -49,9 +49,10 @@ class Trainer(Callbacks):
         }
 
         path = Trainer.get_model_path(self.config.name, self.epoch, self.iteration)
-        print(
-            f"\t> Saving model {self.config.name} at epoch {self.epoch}, iter {self.iteration} to {path}"
-        )
+        if self.config.verbose:
+            print(
+                f"\t> Saving model {self.config.name} at epoch {self.epoch}, iter {self.iteration} to {path}"
+            )
         torch.save(state, path)
 
     def _load_state_dict(self, checkpoint):
@@ -128,6 +129,16 @@ class Trainer(Callbacks):
                 output, target, loss, self.epoch, self.iteration
             )
             self.trigger_callbacks("on_batch_end", **stats)
+
+            if self.config.verbose:
+                lr = (
+                    self.config.lr
+                    if self.scheduler == None
+                    else self.scheduler.get_last_lr()[0]
+                )
+                print(
+                    f"[{self.epoch:03d} | {self.iteration:05d}:{self.config.max_iterations:05d}] | [Loss] tr: {stats['train']['loss']:.4f}, ev: {stats['eval']['loss']:.4f} | [Acc] tr: {stats['train']['acc']:.4f}, ev: {stats['eval']['acc']:.4f} | [RMSE] tr: {stats['train']['rmse']:.4f}, ev: {stats['eval']['rmse']:.4f} | [Lr] {float(lr):.4f}"
+                )
 
             self.iteration += 1
 

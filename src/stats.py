@@ -107,6 +107,10 @@ class Statistics:
 
     @torch.no_grad()
     def register(self, train_output, train_target, train_loss, epoch, iteration):
+        if self.config.stats_every == None or (
+            self.config.stats_every != 0 and iteration % self.config.stats_every != 0
+        ):
+            return
         # device = self.config.device
         # FIXME: move to device?
 
@@ -115,6 +119,12 @@ class Statistics:
         self._register_stats(self.train, train_acc, train_loss, train_rmse)
 
         self.lr = self.scheduler.get_lr() if self.scheduler else self.lr
+
+        stats = {
+            "epoch": epoch,
+            "iter": iteration,
+            "train": self.train,
+        }
 
         if self.config.evaluate != False:
             eval_epoch = (
@@ -128,13 +138,8 @@ class Statistics:
             if eval_epoch or eval_iter:
                 eval_loss, eval_accuracy, eval_rmse = self.evaluate()
                 self._register_stats(self.eval, eval_accuracy, eval_loss, eval_rmse)
+                stats["eval"] = self.eval
 
-        stats = {
-            "epoch": epoch,
-            "iter": iteration,
-            "train": self.train,
-            "eval": self.eval,
-        }
         if self.config.wandb:
             self.wandb.log(stats)
         return stats

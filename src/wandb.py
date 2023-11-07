@@ -1,4 +1,5 @@
 import wandb
+import time
 
 
 class Wandb:
@@ -14,6 +15,7 @@ class Wandb:
         }
         if scheduler != None:
             self.class_payload["scheduler"] = scheduler.__class__.__name__
+        self.start = -1
 
     def init(self):
         run_name = self.get_run_name()
@@ -27,17 +29,24 @@ class Wandb:
             config=self.config.__dict__,
         )
         wandb.define_metric("iter")
+        wandb.define_metric("time")
         wandb.define_metric("eval", step_metric="iter")
 
     def log(self, stats):
+        if self.start == -1:
+            self.start = time.time()
+
         payload = dict(**stats, **self.class_payload)
         payload["lr"] = (
             self.config.lr
             if self.config.scheduler == None
             else self.config.scheduler.get_last_lr()[0]
         )
+        payload["time"] = time.time() - self.start
+
         if self.config.verbose:
             print(f"\t> Logging to wandb: {payload}")
+
         wandb.log(payload)
 
     def get_run_name(self):

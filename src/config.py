@@ -13,6 +13,7 @@ def Config(
     epochs=None,
     batch_size=64,
     dropout=0.2,
+    stats_every=1,
     evaluate=True,
     evaluate_every=10,
     grad_norm_clip=1.0,
@@ -37,6 +38,7 @@ def Config(
         epochs (int, optional): Number of epochs (if max_iterations is not defined). Defaults to None.
         batch_size (int, optional): Batch size. Defaults to 64.
         dropout (float, optional): Dropout rate. Defaults to 0.2.
+        stats_every (int, optional): Compute statistics every `stats_every` iterations. Defaults to 1.
         evaluate (bool or str, optional): Whether to periodically evaluate the model on the evaluation dataset, or 'epoch' to evaluate every epoch. Defaults to True.
         evaluate_every (int, optional): Evaluate every `evaluate_every` iterations / or epoch if evaluate is set to 'epoch'. Defaults to 10.
         grad_norm_clip (float, optional): Gradient norm clipping. Defaults to 1.0.
@@ -80,6 +82,7 @@ def Config(
         epochs=epochs,
         batch_size=batch_size,
         dropout=dropout,
+        stats_every=stats_every,
         evaluate=evaluate,
         evaluate_every=evaluate_every,
         grad_norm_clip=grad_norm_clip,
