@@ -3,8 +3,9 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
+from .wandb import Wandb
 from .stats import Statistics
-from .utils import to_device, Callbacks
+from .utils import to_device, get_lr, Callbacks
 
 
 class Trainer(Callbacks):
@@ -29,12 +30,16 @@ class Trainer(Callbacks):
                 self.optimizer, **self.config.scheduler_params
             )
 
-        Callbacks.__init__(self, self.model)
+        if config.wandb:
+            self.wandb = Wandb(config)
+
+        Callbacks.__init__(self)
 
     @staticmethod
-    def get_model_path(name, epoch, iteration):
-        prefix = os.path.join("/kaggle/working/models/", name)
-        return f"{prefix}_epoch={epoch:03d}_iter={iteration:06d}.pt"
+    def get_checkpoint_path(checkpoint_folder, name, epoch, iteration):
+        folder = os.path.join(checkpoint_folder, name)
+        file = f"epoch={epoch:03d}_iter={iteration:06d}.pt"
+        return folder, os.path.join(folder, file)
 
     def save_model(self):
         state = {
@@ -48,12 +53,17 @@ class Trainer(Callbacks):
             else None,
         }
 
-        path = Trainer.get_model_path(self.config.name, self.epoch, self.iteration)
+        folder, cp_path = Trainer.get_checkpoint_path(
+            self.config.checkpoint_folder, self.config.name, self.epoch, self.iteration
+        )
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+
         if self.config.verbose:
             print(
-                f"\t> Saving model {self.config.name} at epoch {self.epoch}, iter {self.iteration} to {path}"
+                f"\t> Saving model {self.config.name} at epoch {self.epoch}, iter {self.iteration} to {cp_path}"
             )
-        torch.save(state, path)
+        torch.save(state, cp_path)
 
     def _load_state_dict(self, checkpoint):
         self.epoch = checkpoint["epoch"]
@@ -64,13 +74,40 @@ class Trainer(Callbacks):
             self.scheduler.load_state_dict(checkpoint["scheduler"])
 
     @staticmethod
-    def from_pretrained(model, model_name, epoch, iteration):
-        path = Trainer.get_path(model_name, epoch, iteration)
-        checkpoint = torch.load(path)
+    def from_pretrained(model, checkpoint_folder, model_name, epoch, iteration):
+        _, cp_path = Trainer.get_checkpoint_path(
+            checkpoint_folder, model_name, epoch, iteration
+        )
+        checkpoint = torch.load(cp_path)
         config = checkpoint["config"]
         trainer = Trainer(model, config)
         trainer._load_state_dict(checkpoint)
         return trainer
+
+    def on_batch_end(self, statistics, output, target, loss):
+        self.trigger_callbacks("on_batch_end")
+
+        if self.config.stats_every == None or (
+            self.iteration != 0 and self.iteration % self.config.stats_every != 0
+        ):
+            return
+
+        stats = statistics.register(output, target, loss, self.epoch, self.iteration)
+
+        if self.config.wandb:
+            self.wandb.log(stats)
+
+        self.trigger_callbacks("on_stats", **stats)
+
+        if self.config.verbose:
+            if "eval" in stats:
+                print(
+                    f"[{self.epoch:03d} | {self.iteration:05d}:{self.config.max_iterations:05d}] | [Loss] tr: {stats['train']['loss']:.4f}, ev: {stats['eval']['loss']:.4f} | [Acc] tr: {stats['train']['acc']:.4f}, ev: {stats['eval']['acc']:.4f} | [RMSE] tr: {stats['train']['rmse']:.4f}, ev: {stats['eval']['rmse']:.4f} | [Lr] {stats['lr']:.4f}"
+                )
+            else:
+                print(
+                    f"[{self.epoch:03d} | {self.iteration:05d}:{self.config.max_iterations:05d}] | [Loss] tr: {stats['train']['loss']:.4f} | [Acc] tr: {stats['train']['acc']:.4f} | [RMSE] tr: {stats['train']['rmse']:.4f} | [Lr] {stats['lr']:.4f}"
+                )
 
     def run(self, train_dataset, eval_dataset=None):
         device = self.config.device
@@ -96,6 +133,9 @@ class Trainer(Callbacks):
             num_workers=self.config.num_workers,
         )
         data_iter = iter(train_loader)
+
+        if self.config.wandb:
+            self.wandb.init(self.model, self.optimizer, self.criterion, self.scheduler)
 
         while self.iteration < self.config.max_iterations and (
             self.config.epochs == None or self.epoch < self.config.epochs
@@ -125,20 +165,7 @@ class Trainer(Callbacks):
                 self.scheduler.step()
             self.optimizer.zero_grad(set_to_none=True)
 
-            stats = statistics.register(
-                output, target, loss, self.epoch, self.iteration
-            )
-            self.trigger_callbacks("on_batch_end", **stats)
-
-            if self.config.verbose:
-                lr = (
-                    self.config.lr
-                    if self.scheduler == None
-                    else self.scheduler.get_last_lr()[0]
-                )
-                print(
-                    f"[{self.epoch:03d} | {self.iteration:05d}:{self.config.max_iterations:05d}] | [Loss] tr: {stats['train']['loss']:.4f}, ev: {stats['eval']['loss']:.4f} | [Acc] tr: {stats['train']['acc']:.4f}, ev: {stats['eval']['acc']:.4f} | [RMSE] tr: {stats['train']['rmse']:.4f}, ev: {stats['eval']['rmse']:.4f} | [Lr] {float(lr):.4f}"
-                )
+            self.on_batch_end(statistics, output, target, loss)
 
             self.iteration += 1
 

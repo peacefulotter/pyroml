@@ -7,7 +7,14 @@ class DummyModel(nn.Module):
     def __init__(self, size=16):
         super().__init__()
         self.module = nn.Sequential(
-            nn.Linear(size, size // 2), nn.ReLU(), nn.Linear(size // 2, 2), nn.Sigmoid()
+            nn.Linear(size, size * 4),
+            nn.ReLU(),
+            nn.Linear(size * 4, size * 2),
+            nn.ReLU(),
+            nn.Linear(size * 2, size),
+            nn.ReLU(),
+            nn.Linear(size, 2),
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
@@ -24,7 +31,9 @@ class DummyDataset(Dataset):
 
     def __getitem__(self, idx):
         x = torch.randn(self.in_dim)
-        y = torch.tensor([torch.mean(x**2 + 0.3 * x + 0.1), torch.sum(x)])
+        y = torch.tensor(
+            [torch.sum(x**2 + 0.3 * x + 0.1) / torch.sum(x), torch.sum(x)]
+        )
         return x, y
 
 

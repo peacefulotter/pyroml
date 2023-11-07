@@ -1,32 +1,42 @@
 import wandb
 import time
+import pandas as pd
+
+from .utils import get_lr
 
 
 class Wandb:
-    def __init__(self, model, optimizer, criterion, scheduler, config):
+    def __init__(self, config):
         assert (
-            self.config.wandb_project != None
+            config.wandb_project != None
         ), "You need to specify a project name in the config to be able to use WandB (config.wandb_project='my_project_name')"
         self.config = config
-        self.class_payload = {
+        self.start = -1
+
+    def init(self, model, optimizer, criterion, scheduler):
+        self.scheduler = scheduler
+
+        run_name = self.get_run_name()
+
+        wandb_config = self.config.__dict__
+        classes_config = {
             "model": model.__class__.__name__,
             "optimizer": optimizer.__class__.__name__,
             "criterion": criterion.__class__.__name__,
         }
         if scheduler != None:
-            self.class_payload["scheduler"] = scheduler.__class__.__name__
-        self.start = -1
+            classes_config["scheduler"] = scheduler.__class__.__name__
+        wandb_config.update(classes_config)
 
-    def init(self):
-        run_name = self.get_run_name()
         if self.config.verbose:
             print(
                 f"\t> Initializing wandb with project_name {self.config.wandb_project} and run name {run_name}"
             )
+
         wandb.init(
             project=self.config.wandb_project,
             name=run_name,
-            config=self.config.__dict__,
+            config=wandb_config,
         )
         wandb.define_metric("iter")
         wandb.define_metric("time")
@@ -36,16 +46,11 @@ class Wandb:
         if self.start == -1:
             self.start = time.time()
 
-        payload = dict(**stats, **self.class_payload)
-        payload["lr"] = (
-            self.config.lr
-            if self.config.scheduler == None
-            else self.config.scheduler.get_last_lr()[0]
-        )
+        payload = dict(**stats)
+        payload["lr"] = get_lr(self.config, self.scheduler)
         payload["time"] = time.time() - self.start
-
-        if self.config.verbose:
-            print(f"\t> Logging to wandb: {payload}")
+        payload = pd.json_normalize(payload, sep="/")
+        payload = payload.to_dict(orient="records")[0]
 
         wandb.log(payload)
 

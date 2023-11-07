@@ -16,6 +16,12 @@ def to_device(obj, device):
     return obj
 
 
+def get_lr(config, scheduler):
+    if scheduler == None:
+        return config.lr
+    return float(scheduler.get_last_lr()[0])
+
+
 class Record:
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
@@ -29,9 +35,8 @@ class Record:
 
 
 class Callbacks:
-    def __init__(self, model):
+    def __init__(self):
         self.callbacks = defaultdict(list)
-        self.model = model
 
     def add_callback(self, onevent: str, callback):
         self.callbacks[onevent].append(callback)
@@ -41,4 +46,4 @@ class Callbacks:
 
     def trigger_callbacks(self, onevent: str, **kwargs):
         for callback in self.callbacks.get(onevent, []):
-            callback(self, self.model, **kwargs)
+            callback(self, **kwargs)

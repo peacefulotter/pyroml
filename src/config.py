@@ -25,6 +25,7 @@ def Config(
     scheduler_params=None,
     wandb=True,
     wandb_project=None,
+    checkpoint_folder="./checkpoints",
     verbose=False,
 ):
     """
@@ -50,6 +51,7 @@ def Config(
         scheduler_params (dict, optional): Scheduler parameters. Defaults to None.
         wandb (bool, optional): Whether to use wandb. Defaults to True.
         wandb_project (str, optional): Wandb project name, if wandb is set to True. Defaults to None.
+        checkpoint_folder (str, optional): Folder to save checkpoints. Defaults to "./checkpoints".
         verbose (bool, optional): Whether to print details of whats going on in the system. Defaults to False.
 
     Returns:
@@ -94,5 +96,6 @@ def Config(
         scheduler_params=scheduler_params,
         wandb=wandb,
         wandb_project=wandb_project,
+        checkpoint_folder=checkpoint_folder,
         verbose=verbose,
     )

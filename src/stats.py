@@ -1,8 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 
-from .wandb import Wandb
-from .utils import to_device
+from .utils import to_device, get_lr
 
 # TODO: from sklearn.metrics import accuracy_score, precision_score, recall_score
 
@@ -44,7 +43,6 @@ class Statistics:
             num_workers=0,
         )
         self.lr = config.lr
-        self.wandb = Wandb(model, optimizer, criterion, scheduler, config)
 
     @torch.no_grad()
     def get_accuracy(self, output, target):
@@ -107,10 +105,6 @@ class Statistics:
 
     @torch.no_grad()
     def register(self, train_output, train_target, train_loss, epoch, iteration):
-        if self.config.stats_every == None or (
-            self.config.stats_every != 0 and iteration % self.config.stats_every != 0
-        ):
-            return
         # device = self.config.device
         # FIXME: move to device?
 
@@ -118,21 +112,17 @@ class Statistics:
         train_rmse = self.get_rmse(train_output, train_target)
         self._register_stats(self.train, train_acc, train_loss, train_rmse)
 
-        self.lr = self.scheduler.get_lr() if self.scheduler else self.lr
+        self.lr = get_lr(self.config, self.scheduler)
 
-        stats = {
-            "epoch": epoch,
-            "iter": iteration,
-            "train": self.train,
-        }
+        stats = {"epoch": epoch, "iter": iteration, "train": self.train, "lr": self.lr}
 
         if self.config.evaluate != False:
             eval_epoch = (
-                self.config.evalute == "epoch"
+                self.config.evaluate == "epoch"
                 and epoch % self.config.evaluate_every == 0
             )
             eval_iter = (
-                self.config.evalute == True
+                self.config.evaluate == True
                 and iteration % self.config.evaluate_every == 0
             )
             if eval_epoch or eval_iter:
@@ -140,6 +130,4 @@ class Statistics:
                 self._register_stats(self.eval, eval_accuracy, eval_loss, eval_rmse)
                 stats["eval"] = self.eval
 
-        if self.config.wandb:
-            self.wandb.log(stats)
         return stats
