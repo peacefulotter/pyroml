@@ -19,10 +19,13 @@ if __name__ == "__main__":
     def on_epoch_end(trainer, **kwargs):
         trainer.save_model()
 
-    max_iterations = 100_000
+    max_iterations = len(tr_ds) * 5
     config = Config(
         name="pyro_main_test",
         max_iterations=max_iterations,
+        dropout=0,
+        lr=1e-3,
+        grad_norm_clip=None,
         wandb_project="pyro_main_test",
         evaluate_every=10,
         verbose=False,

@@ -156,7 +156,7 @@ class Trainer(Callbacks):
             loss = self.criterion(output, target)
 
             loss.backward()
-            if self.config.grad_norm_clip != 0.0:
+            if self.config.grad_norm_clip != None and self.config.grad_norm_clip != 0.0:
                 nn.utils.clip_grad_norm_(
                     self.model.parameters(), self.config.grad_norm_clip
                 )

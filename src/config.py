@@ -12,7 +12,7 @@ def Config(
     lr=1e-4,
     epochs=None,
     batch_size=64,
-    dropout=0.2,
+    dropout=0.1,
     stats_every=1,
     evaluate=True,
     evaluate_every=10,

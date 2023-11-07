@@ -4,16 +4,14 @@ from torch.utils.data import Dataset, DataLoader
 
 
 class DummyModel(nn.Module):
-    def __init__(self, size=16):
+    def __init__(self, in_dim=16):
         super().__init__()
         self.module = nn.Sequential(
-            nn.Linear(size, size * 4),
+            nn.Linear(in_dim, in_dim * 4),
             nn.ReLU(),
-            nn.Linear(size * 4, size * 2),
+            nn.Linear(in_dim * 4, in_dim * 2),
             nn.ReLU(),
-            nn.Linear(size * 2, size),
-            nn.ReLU(),
-            nn.Linear(size, 2),
+            nn.Linear(in_dim * 2, in_dim),
             nn.Sigmoid(),
         )
 
@@ -31,9 +29,7 @@ class DummyDataset(Dataset):
 
     def __getitem__(self, idx):
         x = torch.randn(self.in_dim)
-        y = torch.tensor(
-            [torch.sum(x**2 + 0.3 * x + 0.1) / torch.sum(x), torch.sum(x)]
-        )
+        y = 2 * x  # x**2 + 0.3 * x + 0.1
         return x, y
 
 
@@ -42,6 +38,7 @@ if __name__ == "__main__":
     model = DummyModel()
     loader = DataLoader(ds, batch_size=2, num_workers=0)
     for x, y in loader:
+        print(x, y)
         print(x.shape, y.shape)
         output = model(x)
         print(output.shape)
