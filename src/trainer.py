@@ -13,14 +13,15 @@ class Trainer(Callbacks):
         # TODO: Move most of the __init__ code to the run method, to allow modifying ALL configs between runs
 
         self.config = config
-        self.device = config.device
-        if self.device == "auto":
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"[Trainer] set on device {self.device}")
+        if self.config.device == "auto":
+            self.config.device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"[Trainer] Set on device {self.config.device}")
 
-        self.model = model.to(device=self.device)
+        self.model = model.to(device=self.config.device)
         if self.config.compile:
+            print(f"[Trainer] Compiling model...")
             self.model = torch.compile(self.model)
+            print(f"[Trainer] Model compiled!")
 
         self.epoch = 0
         self.iteration = 0
@@ -65,7 +66,7 @@ class Trainer(Callbacks):
 
         if self.config.verbose:
             print(
-                f"\t> Saving model {self.config.name} at epoch {self.epoch}, iter {self.iteration} to {cp_path}"
+                f"[Trainer] Saving model {self.config.name} at epoch {self.epoch}, iter {self.iteration} to {cp_path}"
             )
         torch.save(state, cp_path)
 
@@ -103,17 +104,8 @@ class Trainer(Callbacks):
 
         self.trigger_callbacks("on_stats", **stats)
 
-        if self.config.verbose:
-            if "eval" in stats:
-                print(
-                    f"[{self.epoch:03d} | {self.iteration:05d}:{self.config.max_iterations:05d}] | [Loss] tr: {stats['train']['loss']:.4f}, ev: {stats['eval']['loss']:.4f} | [Acc] tr: {stats['train']['acc']:.4f}, ev: {stats['eval']['acc']:.4f} | [RMSE] tr: {stats['train']['rmse']:.4f}, ev: {stats['eval']['rmse']:.4f} | [Lr] {stats['lr']:.4f}"
-                )
-            else:
-                print(
-                    f"[{self.epoch:03d} | {self.iteration:05d}:{self.config.max_iterations:05d}] | [Loss] tr: {stats['train']['loss']:.4f} | [Acc] tr: {stats['train']['acc']:.4f} | [RMSE] tr: {stats['train']['rmse']:.4f} | [Lr] {stats['lr']:.4f}"
-                )
-
     def run(self, train_dataset, eval_dataset=None):
+        device = self.config.device
         self.model.train()
 
         statistics = Statistics(
@@ -126,11 +118,9 @@ class Trainer(Callbacks):
 
         train_loader = DataLoader(
             train_dataset,
-            sampler=RandomSampler(
-                train_dataset, replacement=True, num_samples=int(1e5)
-            ),
+            sampler=RandomSampler(train_dataset, replacement=True),
             shuffle=False,
-            pin_memory=True,
+            pin_memory=device != "cpu",
             batch_size=self.config.batch_size,
             num_workers=self.config.num_workers,
         )
@@ -152,7 +142,7 @@ class Trainer(Callbacks):
 
             self.trigger_callbacks("on_batch_start")
             data, target = batch
-            data, target = to_device(data, self.device), to_device(target, self.device)
+            data, target = to_device(data, device), to_device(target, device)
 
             output = self.model(data)
             loss = self.criterion(output, target)

@@ -18,9 +18,9 @@ class Statistics:
         self.eval_loader = DataLoader(
             eval_dataset,
             shuffle=False,
-            pin_memory=False,  # FIXME: set this to true
+            pin_memory=config.device != "cpu",
             batch_size=self.config.batch_size,
-            num_workers=0,
+            num_workers=1,
         )
         self.lr = config.lr
 
@@ -42,7 +42,7 @@ class Statistics:
 
         for data, target in self.eval_loader:
             data, target = to_device(data, device), to_device(target, device)
-            output = self.model(data).squeeze()
+            output = self.model(data).squeeze()  # FIXME: squeeze?
 
             for i, metric in enumerate(self.eval_metrics):
                 metric_value = metric.compute(output, target)
@@ -57,9 +57,17 @@ class Statistics:
 
         return eval_stats
 
+    def log_stats(self, stats, epoch, iteration):
+        log = f"[{epoch:03d} | {iteration:05d}:{self.config.max_iterations:05d}]"
+        for metric in self.train_metrics:
+            log += f" | [{metric.name}] tr: {stats['train'][metric.name]:.4f}"
+            if "eval" in stats:
+                log += f", ev: {stats['eval'][metric.name]:.4f}"
+        log += f" | [Lr] {stats['lr']:.4f}"
+        print(log)
+
     @torch.no_grad()
     def register(self, train_output, train_target, train_loss, epoch, iteration):
-        # device = self.config.device
         # FIXME: move to device?
 
         train_stats = {}
@@ -88,5 +96,8 @@ class Statistics:
             if eval_epoch or eval_iter:
                 eval_stats = self.evaluate()
                 stats["eval"] = eval_stats
+
+        if self.config.verbose:
+            self.log_stats(stats, epoch, iteration)
 
         return stats

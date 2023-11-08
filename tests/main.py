@@ -18,14 +18,16 @@ if __name__ == "__main__":
     assert output.shape == y.shape
 
     def on_epoch_end(trainer, **kwargs):
-        trainer.save_model()
+        pass
+        # trainer.save_model()
 
-    max_iterations = len(tr_ds) * 5
+    max_iterations = 256
     config = Config(
         name="pyro_main_test_v2",
         max_iterations=max_iterations,
         dropout=0,
         lr=1e-2,
+        batch_size=64,
         metrics=[Accuracy, RMSE],
         grad_norm_clip=None,
         wandb_project="pyro_main_test",

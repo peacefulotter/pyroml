@@ -30,7 +30,7 @@ class Wandb:
 
         if self.config.verbose:
             print(
-                f"\t> Initializing wandb with project_name {self.config.wandb_project} and run name {run_name}"
+                f"[WandB] Initializing wandb with project_name {self.config.wandb_project} and run name {run_name}"
             )
 
         wandb.init(
@@ -55,5 +55,11 @@ class Wandb:
         wandb.log(payload)
 
     def get_run_name(self):
-        name = f"{self.config.name}_lr={self.config.lr}_bs={self.config.batch_size}"
+        optim_name = self.config.optimizer.__class__.__name__
+        sched_name = (
+            self.config.scheduler.__class__.__name__
+            if self.config.scheduler != None
+            else "None"
+        )
+        name = f"{self.config.name}_lr={self.config.lr}_bs={self.config.batch_size}_optim={optim_name}${sched_name}"
         return name
