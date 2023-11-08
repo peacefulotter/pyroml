@@ -1,11 +1,11 @@
 import os
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, RandomSampler
 
 from .wandb import Wandb
 from .stats import Statistics
-from .utils import to_device, get_lr, Callbacks
+from .utils import to_device, Callbacks
 
 
 class Trainer(Callbacks):
@@ -13,12 +13,14 @@ class Trainer(Callbacks):
         # TODO: Move most of the __init__ code to the run method, to allow modifying ALL configs between runs
 
         self.config = config
-        if config.device == "auto":
-            self.config.device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"[Trainer] set on device {self.config.device}")
+        self.device = config.device
+        if self.device == "auto":
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"[Trainer] set on device {self.device}")
 
-        self.model = model.to(device=config.device)
-        # self.model = torch.compile(self.model)
+        self.model = model.to(device=self.device)
+        if self.config.compile:
+            self.model = torch.compile(self.model)
 
         self.epoch = 0
         self.iteration = 0
@@ -112,7 +114,6 @@ class Trainer(Callbacks):
                 )
 
     def run(self, train_dataset, eval_dataset=None):
-        device = self.config.device
         self.model.train()
 
         statistics = Statistics(
@@ -125,11 +126,11 @@ class Trainer(Callbacks):
 
         train_loader = DataLoader(
             train_dataset,
-            sampler=torch.utils.data.RandomSampler(
+            sampler=RandomSampler(
                 train_dataset, replacement=True, num_samples=int(1e5)
             ),
             shuffle=False,
-            pin_memory=False,  # FIXME: set this to true
+            pin_memory=True,
             batch_size=self.config.batch_size,
             num_workers=self.config.num_workers,
         )
@@ -151,7 +152,7 @@ class Trainer(Callbacks):
 
             self.trigger_callbacks("on_batch_start")
             data, target = batch
-            data, target = to_device(data, device), to_device(target, device)
+            data, target = to_device(data, self.device), to_device(target, self.device)
 
             output = self.model(data)
             loss = self.criterion(output, target)
