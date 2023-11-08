@@ -16,7 +16,7 @@ class Wandb:
     def init(self, model, optimizer, criterion, scheduler):
         self.scheduler = scheduler
 
-        run_name = self.get_run_name()
+        run_name = self.get_run_name(optimizer, scheduler)
 
         wandb_config = self.config.__dict__
         classes_config = {
@@ -54,12 +54,8 @@ class Wandb:
 
         wandb.log(payload)
 
-    def get_run_name(self):
-        optim_name = self.config.optimizer.__class__.__name__
-        sched_name = (
-            self.config.scheduler.__class__.__name__
-            if self.config.scheduler != None
-            else "None"
-        )
-        name = f"{self.config.name}_lr={self.config.lr}_bs={self.config.batch_size}_optim={optim_name}${sched_name}"
+    def get_run_name(self, optimizer, scheduler):
+        optim_name = optimizer.__class__.__name__
+        sched_name = scheduler.__class__.__name__ if scheduler != None else "None"
+        name = f"{self.config.name}_lr={self.config.lr}_bs={self.config.batch_size}_optim={optim_name}_sched={sched_name}"
         return name
