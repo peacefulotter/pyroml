@@ -16,6 +16,7 @@ def Config(
     stats_every=1,
     evaluate=True,
     evaluate_every=10,
+    metrics=[],
     grad_norm_clip=1.0,
     num_workers=4,
     optimizer=AdamW,
@@ -42,6 +43,7 @@ def Config(
         stats_every (int, optional): Compute statistics every `stats_every` iterations. Defaults to 1.
         evaluate (bool or str, optional): Whether to periodically evaluate the model on the evaluation dataset, or 'epoch' to evaluate every epoch. Defaults to True.
         evaluate_every (int, optional): Evaluate every `evaluate_every` iterations / or epoch if evaluate is set to 'epoch'. Defaults to 10.
+        metrics (list, optional): List of metric classes to compute. Defaults to []. Possible values: metrics.Accuracy, metrics.RMSE, or your own class inheriting Metrics.
         grad_norm_clip (float, optional): Gradient norm clipping. Defaults to 1.0.
         num_workers (int, optional): Number of workers for the dataloader. Defaults to 4.
         optimizer (torch.optim.Optimizer, optional): Optimizer. Defaults to AdamW.
@@ -87,6 +89,7 @@ def Config(
         stats_every=stats_every,
         evaluate=evaluate,
         evaluate_every=evaluate_every,
+        metrics=metrics,
         grad_norm_clip=grad_norm_clip,
         num_workers=num_workers,
         optimizer=optimizer,

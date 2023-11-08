@@ -10,6 +10,8 @@ from .utils import to_device, get_lr, Callbacks
 
 class Trainer(Callbacks):
     def __init__(self, model, config):
+        # TODO: Move most of the __init__ code to the run method, to allow modifying ALL configs between runs
+
         self.config = config
         if config.device == "auto":
             self.config.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -36,8 +38,8 @@ class Trainer(Callbacks):
         Callbacks.__init__(self)
 
     @staticmethod
-    def get_checkpoint_path(checkpoint_folder, name, epoch, iteration):
-        folder = os.path.join(checkpoint_folder, name)
+    def get_checkpoint_path(config, epoch, iteration):
+        folder = os.path.join(config.checkpoint_folder, config.name)
         file = f"epoch={epoch:03d}_iter={iteration:06d}.pt"
         return folder, os.path.join(folder, file)
 
@@ -54,7 +56,7 @@ class Trainer(Callbacks):
         }
 
         folder, cp_path = Trainer.get_checkpoint_path(
-            self.config.checkpoint_folder, self.config.name, self.epoch, self.iteration
+            self.config, self.epoch, self.iteration
         )
         if not os.path.exists(folder):
             os.makedirs(folder)
@@ -67,19 +69,19 @@ class Trainer(Callbacks):
 
     def _load_state_dict(self, checkpoint):
         self.epoch = checkpoint["epoch"]
-        self.iteration = checkpoint["iteration"]
+        self.iteration = checkpoint["iter"]
         self.model.load_state_dict(checkpoint["model"])
         self.optimizer.load_state_dict(checkpoint["optimizer"])
         if self.config.scheduler != None:
             self.scheduler.load_state_dict(checkpoint["scheduler"])
 
     @staticmethod
-    def from_pretrained(model, checkpoint_folder, model_name, epoch, iteration):
-        _, cp_path = Trainer.get_checkpoint_path(
-            checkpoint_folder, model_name, epoch, iteration
-        )
+    def from_pretrained(model, config, epoch, iteration):
+        _, cp_path = Trainer.get_checkpoint_path(config, epoch, iteration)
+        print("[Trainer] Loading checkpoint from", cp_path)
         checkpoint = torch.load(cp_path)
-        config = checkpoint["config"]
+        # Don't use the checkpoint config as it contains erroneous data such as optimizer, scheduler represented as strings
+        # Moreover, this allows to change the config between runs, even tho this is already possible from one training to another
         trainer = Trainer(model, config)
         trainer._load_state_dict(checkpoint)
         return trainer
@@ -115,7 +117,6 @@ class Trainer(Callbacks):
 
         statistics = Statistics(
             self.model,
-            self.optimizer,
             self.criterion,
             self.scheduler,
             self.config,
@@ -169,4 +170,5 @@ class Trainer(Callbacks):
 
             self.iteration += 1
 
+        self.save_model()
         return statistics

@@ -7,12 +7,10 @@ class DummyModel(nn.Module):
     def __init__(self, in_dim=16):
         super().__init__()
         self.module = nn.Sequential(
-            nn.Linear(in_dim, in_dim * 4),
-            nn.ReLU(),
-            nn.Linear(in_dim * 4, in_dim * 2),
-            nn.ReLU(),
+            nn.Linear(in_dim, in_dim * 2),
+            nn.LeakyReLU(),
             nn.Linear(in_dim * 2, in_dim),
-            nn.Sigmoid(),
+            nn.LeakyReLU(),
         )
 
     def forward(self, x):
@@ -21,15 +19,15 @@ class DummyModel(nn.Module):
 
 class DummyDataset(Dataset):
     def __init__(self, size=1024, in_dim=16):
-        self.size = size
         self.in_dim = in_dim
+        self.data = torch.rand(size, in_dim)
 
     def __len__(self):
-        return self.size
+        return self.data.shape[0]
 
     def __getitem__(self, idx):
-        x = torch.randn(self.in_dim)
-        y = 2 * x  # x**2 + 0.3 * x + 0.1
+        x = self.data[idx]
+        y = x**2 + 0.3 * x + 0.1
         return x, y
 
 
