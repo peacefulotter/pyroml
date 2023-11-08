@@ -64,10 +64,9 @@ class Trainer(Callbacks):
         if not os.path.exists(folder):
             os.makedirs(folder)
 
-        if self.config.verbose:
-            print(
-                f"[Trainer] Saving model {self.config.name} at epoch {self.epoch}, iter {self.iteration} to {cp_path}"
-            )
+        print(
+            f"[Trainer] Saving model {self.config.name} at epoch {self.epoch}, iter {self.iteration} to {cp_path}"
+        )
         torch.save(state, cp_path)
 
     def _load_state_dict(self, checkpoint):

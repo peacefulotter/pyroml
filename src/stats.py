@@ -20,7 +20,7 @@ class Statistics:
             shuffle=False,
             pin_memory=config.device != "cpu",
             batch_size=self.config.batch_size,
-            num_workers=1,
+            num_workers=self.config.eval_num_workers,
         )
         self.lr = config.lr
 

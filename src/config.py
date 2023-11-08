@@ -20,6 +20,7 @@ def Config(
     metrics=[],
     grad_norm_clip=1.0,
     num_workers=4,
+    eval_num_workers=0,
     optimizer=AdamW,
     criterion=nn.MSELoss,
     scheduler=None,
@@ -48,6 +49,7 @@ def Config(
         metrics (list, optional): List of metric classes to compute. Defaults to []. Possible values: metrics.Accuracy, metrics.RMSE, or your own class inheriting Metrics.
         grad_norm_clip (float, optional): Gradient norm clipping. Defaults to 1.0.
         num_workers (int, optional): Number of workers for the dataloader. Defaults to 4.
+        eval_num_workers (int, optional): Number of workers for the evaluation dataloader. Note that a value > 0 can cause an AssertionError: 'can only test a child process during evaluation'. Defaults to 0.
         optimizer (torch.optim.Optimizer, optional): Optimizer. Defaults to AdamW.
         criterion (torch.nn.modules.loss._Loss, optional): Loss function. Defaults to nn.MSELoss.
         scheduler (torch.optim.lr_scheduler._LRScheduler, optional): Scheduler. Defaults to None.
@@ -95,6 +97,7 @@ def Config(
         metrics=metrics,
         grad_norm_clip=grad_norm_clip,
         num_workers=num_workers,
+        eval_num_workers=eval_num_workers,
         optimizer=optimizer,
         criterion=criterion,
         scheduler=scheduler,
