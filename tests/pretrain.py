@@ -5,8 +5,8 @@ sys.path.append("..")
 import torch
 import torch.nn as nn
 from dummy import DummyModel, DummyDataset
-from src.trainer import Trainer
-from src.config import Config
+from pyroml.trainer import Trainer
+from pyroml.config import Config
 
 if __name__ == "__main__":
     in_dim = 16

@@ -18,7 +18,7 @@ $ pip install -r requirements.txt
 
 ```shell
 $ cd tests
-$ python main.py # this will launch the training, goto https://wandb.ai/otters-gang/pyro_main_test/workspace  to see the training occuring (should be really fast)
+$ python main.py # this will launch the training, follow the wandb link to access the plots
 $ python pretrain.py # will load the last checkpoint and compute mse on a small part of the dataset, outputs True if model predicts correctly!
 ```
 

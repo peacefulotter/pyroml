@@ -3,9 +3,9 @@ import sys
 sys.path.append("..")
 
 from dummy import DummyDataset, DummyModel
-from src.config import Config
-from src.trainer import Trainer
-from src.metrics import Accuracy, RMSE
+from pyroml.config import Config
+from pyroml.trainer import Trainer
+from pyroml.metrics import Accuracy, RMSE
 
 if __name__ == "__main__":
     tr_ds = DummyDataset()
