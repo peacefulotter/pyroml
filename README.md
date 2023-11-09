@@ -1,12 +1,12 @@
-# pyro
+# pyroml
 
 🔥 Machine Learning tool allowing plug-and-play training for pytorch models
 
 ### Installation
 
 ```shell
-$ git clone https://github.com/peacefulotter/pyro.git
-$ cd pyro
+$ git clone https://github.com/peacefulotter/pyroml.git
+$ cd pyroml
 $ sudo apt install python3.10-venv # check you python version and change it here if !=
 $ sudo apt install python3-virtualenv
 $ python3 -m venv venv
