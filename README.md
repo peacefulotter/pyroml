@@ -1,6 +1,6 @@
 # pyroml
 
-🔥 Machine Learning tool allowing plug-and-play training for pytorch models
+🔥 Machine Learning framework allowing plug-and-play training for pytorch models
 
 ### Installation
 
