@@ -51,7 +51,7 @@ class Trainer(Callbacks):
             "epoch": self.epoch,
             "iter": self.iteration,
             "config": self.config,
-            "model": self.model.state_dict(),
+            "model": self.model.to(device="cpu").state_dict(),
             "optimizer": self.optimizer.state_dict(),
             "scheduler": self.scheduler.state_dict()
             if self.scheduler != None
@@ -70,8 +70,8 @@ class Trainer(Callbacks):
         torch.save(state, cp_path)
 
     def _load_state_dict(self, checkpoint):
-        self.epoch = checkpoint["epoch"]
-        self.iteration = checkpoint["iter"]
+        # self.epoch = checkpoint["epoch"]
+        # self.iteration = checkpoint["iter"]
         self.model.load_state_dict(checkpoint["model"])
         self.optimizer.load_state_dict(checkpoint["optimizer"])
         if self.config.scheduler != None:

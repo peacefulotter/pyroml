@@ -13,9 +13,9 @@ import sys
 
 sys.path.append("..")
 
-from src.config import Config
-from src.trainer import Trainer
-from src.metrics import Accuracy
+from pyroml.config import Config
+from pyroml.trainer import Trainer
+from pyroml.metrics import Accuracy
 
 
 class IrisNet(nn.Module):

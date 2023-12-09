@@ -42,7 +42,7 @@ class Statistics:
 
         for data, target in self.eval_loader:
             data, target = to_device(data, device), to_device(target, device)
-            output = self.model(data).squeeze()  # FIXME: squeeze?
+            output = self.model(data)
 
             for i, metric in enumerate(self.eval_metrics):
                 metric_value = metric.compute(output, target)
