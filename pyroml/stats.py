@@ -40,7 +40,12 @@ class Statistics:
         device = self.config.device
         metric_values = [[] for _ in range(len(self.eval_metrics))]
 
-        for data, target in self.eval_loader:
+        for i, (data, target) in enumerate(self.eval_loader):
+            if (
+                self.config.max_eval_iterations != None
+                and i >= self.config.max_eval_iterations
+            ):
+                break
             data, target = to_device(data, device), to_device(target, device)
             output = self.model(data)
 

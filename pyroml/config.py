@@ -8,6 +8,7 @@ from .utils import Record
 def Config(
     name,
     max_iterations,
+    max_eval_iterations=None,
     device="auto",
     lr=1e-4,
     epochs=None,
@@ -37,6 +38,7 @@ def Config(
     Args:
         name (str): Name of the configuration.
         max_iterations (int): Maximum number of iterations.
+        max_eval_iterations (int, optional): Maximum number of iterations for the evaluation dataset. Defaults to None.
         device (str, optional): Device to train on. Defaults to "auto" which will use GPU if available.
         lr (float, optional): Learning rate. Defaults to 1e-4.
         epochs (int, optional): Number of epochs (if max_iterations is not defined). Defaults to None.
@@ -85,6 +87,7 @@ def Config(
     return Record(
         name=name,
         max_iterations=max_iterations,
+        max_eval_iterations=max_eval_iterations,
         device=device,
         lr=lr,
         epochs=epochs,
