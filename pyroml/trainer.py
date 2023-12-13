@@ -1,27 +1,31 @@
 import os
+import time
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, RandomSampler
 
 from .wandb import Wandb
 from .stats import Statistics
-from .utils import to_device, Callbacks
+from .utils import to_device, get_date, Callbacks
+from .logger import Logger
 
 
 class Trainer(Callbacks):
     def __init__(self, model, config):
-        # TODO: Move most of the __init__ code to the run method, to allow modifying ALL configs between runs
-
         self.config = config
+        self.logger = Logger("Trainer", config)
+        self.date = get_date()
+
         if self.config.device == "auto":
             self.config.device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"[Trainer] Set on device {self.config.device}")
+
+        self.logger.log(f"Set on device {self.config.device}", force=True)
 
         self.model = model.to(device=self.config.device)
         if self.config.compile:
-            print(f"[Trainer] Compiling model...")
+            self.logger.log(f"Compiling model...", force=True)
             self.model = torch.compile(self.model)
-            print(f"[Trainer] Model compiled!")
+            self.logger.log(f"Model compiled!", force=True)
 
         self.epoch = 0
         self.iteration = 0
@@ -41,9 +45,13 @@ class Trainer(Callbacks):
         Callbacks.__init__(self)
 
     @staticmethod
-    def get_checkpoint_path(config, epoch, iteration):
+    def get_file_path(date, epoch, iteration):
+        return f"{date}_epoch={epoch:03d}_iter={iteration:06d}.pt"
+
+    @staticmethod
+    def get_checkpoint_path(config, date, epoch, iteration):
         folder = os.path.join(config.checkpoint_folder, config.name)
-        file = f"epoch={epoch:03d}_iter={iteration:06d}.pt"
+        file = Trainer.get_file_path(date, epoch, iteration)
         return folder, os.path.join(folder, file)
 
     def save_model(self):
@@ -59,33 +67,35 @@ class Trainer(Callbacks):
         }
 
         folder, cp_path = Trainer.get_checkpoint_path(
-            self.config, self.epoch, self.iteration
+            self.config, self.date, self.epoch, self.iteration
         )
         if not os.path.exists(folder):
             os.makedirs(folder)
 
-        print(
-            f"[Trainer] Saving model {self.config.name} at epoch {self.epoch}, iter {self.iteration} to {cp_path}"
+        self.logger.log(
+            f"Saving model {self.config.name} at epoch {self.epoch}, iter {self.iteration} to {cp_path}",
+            force=True,
         )
         torch.save(state, cp_path)
+        return cp_path
 
-    def _load_state_dict(self, checkpoint):
+    def _load_state_dict(self, checkpoint, keep_states):
         # self.epoch = checkpoint["epoch"]
         # self.iteration = checkpoint["iter"]
         self.model.load_state_dict(checkpoint["model"])
-        self.optimizer.load_state_dict(checkpoint["optimizer"])
-        if self.config.scheduler != None:
-            self.scheduler.load_state_dict(checkpoint["scheduler"])
+        if keep_states:
+            self.optimizer.load_state_dict(checkpoint["optimizer"])
+            if self.config.scheduler != None:
+                self.scheduler.load_state_dict(checkpoint["scheduler"])
 
     @staticmethod
-    def from_pretrained(model, config, epoch, iteration):
-        _, cp_path = Trainer.get_checkpoint_path(config, epoch, iteration)
-        print("[Trainer] Loading checkpoint from", cp_path)
+    def from_pretrained(model, config, cp_path, keep_states=True):
+        Logger("Trainer", config).log("Loading checkpoint from", cp_path, force=True)
         checkpoint = torch.load(cp_path)
         # Don't use the checkpoint config as it contains erroneous data such as optimizer, scheduler represented as strings
         # Moreover, this allows to change the config between runs, even tho this is already possible from one training to another
         trainer = Trainer(model, config)
-        trainer._load_state_dict(checkpoint)
+        trainer._load_state_dict(checkpoint, keep_states)
         return trainer
 
     def on_batch_end(self, statistics, output, target, loss):
@@ -103,9 +113,10 @@ class Trainer(Callbacks):
 
         self.trigger_callbacks("on_stats", **stats)
 
-    def run(self, train_dataset, eval_dataset=None):
+    def fit(self, train_dataset, eval_dataset=None):
         device = self.config.device
         self.model.train()
+        self.date = get_date()
 
         statistics = Statistics(
             self.model,
@@ -126,8 +137,10 @@ class Trainer(Callbacks):
         data_iter = iter(train_loader)
 
         if self.config.wandb:
+            self.logger.log("Initializing wandb")
             self.wandb.init(self.model, self.optimizer, self.criterion, self.scheduler)
 
+        self.logger.log("Starting training")
         while self.iteration < self.config.max_iterations and (
             self.config.epochs == None or self.epoch < self.config.epochs
         ):
@@ -160,5 +173,5 @@ class Trainer(Callbacks):
 
             self.iteration += 1
 
-        self.save_model()
-        return statistics
+        cp_path = self.save_model()
+        return statistics, cp_path

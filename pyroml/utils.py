@@ -1,3 +1,4 @@
+import time
 import torch
 from collections import defaultdict
 
@@ -20,6 +21,10 @@ def get_lr(config, scheduler):
     if scheduler == None:
         return config.lr
     return float(scheduler.get_last_lr()[0])
+
+
+def get_date():
+    return time.strftime("%Y-%m-%d_%H:%M", time.gmtime(time.time()))
 
 
 class Record:

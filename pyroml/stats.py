@@ -3,6 +3,7 @@ from torch.utils.data import DataLoader
 
 from .metrics import Loss
 from .utils import to_device, get_lr
+from .logger import Logger
 
 
 class Statistics:
@@ -26,6 +27,7 @@ class Statistics:
 
         self.train_metrics = self.create_metrics()
         self.eval_metrics = self.create_metrics()
+        self.logger = Logger("Statistics", config)
 
     def create_metrics(self):
         metrics = [Loss(self.criterion)]
@@ -35,6 +37,7 @@ class Statistics:
 
     @torch.no_grad()
     def evaluate(self):
+        self.logger.log("Evaluating")
         self.model.eval()
 
         device = self.config.device
@@ -69,7 +72,7 @@ class Statistics:
             if "eval" in stats:
                 log += f", ev: {stats['eval'][metric.name]:.4f}"
         log += f" | [Lr] {stats['lr']:.4f}"
-        print(log)
+        self.logger.log(log)
 
     @torch.no_grad()
     def register(self, train_output, train_target, train_loss, epoch, iteration):

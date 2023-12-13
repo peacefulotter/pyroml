@@ -13,11 +13,11 @@ def Config(
     lr=1e-4,
     epochs=None,
     batch_size=64,
-    dropout=0.1,
     compile=True,
     stats_every=1,
     evaluate=True,
     evaluate_every=10,
+    eval_batch_size=None,
     metrics=[],
     grad_norm_clip=1.0,
     num_workers=4,
@@ -31,6 +31,7 @@ def Config(
     wandb_project=None,
     checkpoint_folder="./checkpoints",
     verbose=False,
+    **kwargs
 ):
     """
     Returns a configuration object with the specified hyperparameters.
@@ -43,11 +44,11 @@ def Config(
         lr (float, optional): Learning rate. Defaults to 1e-4.
         epochs (int, optional): Number of epochs (if max_iterations is not defined). Defaults to None.
         batch_size (int, optional): Batch size. Defaults to 64.
-        dropout (float, optional): Dropout rate. Defaults to 0.2.
         compile (bool, optional): Whether to compile the model, this can significantly improve training time but is not supported on all GPUs. Defaults to True.
         stats_every (int, optional): Compute statistics every `stats_every` iterations. Defaults to 1.
         evaluate (bool or str, optional): Whether to periodically evaluate the model on the evaluation dataset, or 'epoch' to evaluate every epoch. Defaults to True.
         evaluate_every (int, optional): Evaluate every `evaluate_every` iterations / or epoch if evaluate is set to 'epoch'. Defaults to 10.
+        eval_batch_size (int, optional): Batch size for the evaluation dataset. Defaults to None in which case it will be equal to the training batch size.
         metrics (list, optional): List of metric classes to compute. Defaults to []. Possible values: metrics.Accuracy, metrics.RMSE, or your own class inheriting Metrics.
         grad_norm_clip (float, optional): Gradient norm clipping. Defaults to 1.0.
         num_workers (int, optional): Number of workers for the dataloader. Defaults to 4.
@@ -84,6 +85,9 @@ def Config(
             else scheduler_params
         )
 
+    if eval_batch_size == None:
+        eval_batch_size = batch_size
+
     return Record(
         name=name,
         max_iterations=max_iterations,
@@ -92,11 +96,11 @@ def Config(
         lr=lr,
         epochs=epochs,
         batch_size=batch_size,
-        dropout=dropout,
         compile=compile,
         stats_every=stats_every,
         evaluate=evaluate,
         evaluate_every=evaluate_every,
+        eval_batch_size=eval_batch_size,
         metrics=metrics,
         grad_norm_clip=grad_norm_clip,
         num_workers=num_workers,
@@ -110,4 +114,5 @@ def Config(
         wandb_project=wandb_project,
         checkpoint_folder=checkpoint_folder,
         verbose=verbose,
+        **kwargs
     )

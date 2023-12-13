@@ -25,7 +25,6 @@ if __name__ == "__main__":
     config = Config(
         name="pyro_main_test_v2",
         max_iterations=max_iterations,
-        dropout=0,
         lr=1e-2,
         batch_size=64,
         metrics=[Accuracy, RMSE],
