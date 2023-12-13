@@ -26,9 +26,8 @@ class Statistics:
         self.logger = Logger("Statistics", config)
 
     def create_metrics(self):
-        metrics = [Loss(self.criterion)]
-        for Metric in self.config.metrics:
-            metrics.append(Metric())
+        metrics = [m for m in self.config.metrics]
+        metrics.append(Loss(self.criterion))
         return metrics
 
     @torch.no_grad()

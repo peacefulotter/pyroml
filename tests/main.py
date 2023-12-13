@@ -27,7 +27,7 @@ if __name__ == "__main__":
         max_iterations=max_iterations,
         lr=1e-2,
         batch_size=64,
-        metrics=[Accuracy, RMSE],
+        metrics=[Accuracy(), RMSE()],
         grad_norm_clip=None,
         wandb_project="pyro_main_test",
         evaluate_every=10,

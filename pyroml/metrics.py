@@ -1,6 +1,6 @@
 import torch
 
-# TODO: from sklearn.metrics import accuracy_score, precision_score, recall_score
+# TODO: from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 # FIXME: move to device?
 
 
