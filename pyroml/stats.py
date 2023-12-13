@@ -56,12 +56,12 @@ class Statistics:
             output = self.model(data)
 
             for i, metric in enumerate(self.eval_metrics):
-                metric_value = metric.compute(output, target)
+                metric_value = metric.compute(output, target, evaluate=True)
                 metric_values[i].append(metric_value)
 
         eval_stats = {}
         for metric, value in zip(self.eval_metrics, metric_values):
-            stat = metric.update(value)
+            stat = metric.update(value, evaluate=True)
             eval_stats.update(stat)
 
         self.model.train()
@@ -86,9 +86,9 @@ class Statistics:
             value = (
                 train_loss
                 if metric.name == "loss"
-                else metric.compute(train_output, train_target)
+                else metric.compute(train_output, train_target, evaluate=False)
             )
-            stat = metric.update(value)
+            stat = metric.update(value, evaluate=False)
             train_stats.update(stat)
 
         self.lr = get_lr(self.config, self.scheduler)

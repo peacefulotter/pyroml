@@ -6,7 +6,7 @@ with open("README.md", "r") as f:
 
 setup(
     name="pyroml",
-    version="0.0.9",
+    version="0.0.10",
     author="Nathan Maire",
     author_email="nathan.maire@epfl.ch",
     description="Machine Learning tool allowing plug-and-play training for pytorch models",

@@ -12,13 +12,14 @@ class Metric:
         self.mode_value = float("inf") if mode == "min" else float("-inf")
 
     @torch.no_grad()
-    def compute(self, output, target):
+    def compute(self, output, target, evaluate: bool = False):
         """
         Computes the metric for the given output and target tensors.
 
         Args:
             output (torch.Tensor): The output tensor.
             target (torch.Tensor): The target tensor.
+            evaluate (bool): Whether in eval mode or not
 
         Returns:
             torch.Tensor: A tensor containing a single value corresponding to the computed metric.
@@ -26,15 +27,15 @@ class Metric:
         raise NotImplementedError
 
     @torch.no_grad()
-    def aggregate(self, value):
+    def aggregate(self, value, evaluate: bool = False):
         if isinstance(value, tuple) or isinstance(value, list):
             return torch.stack(value).mean()
         else:
             return value
 
     @torch.no_grad()
-    def update(self, value):
-        value = self.aggregate(value)
+    def update(self, value, evaluate: bool = False):
+        value = self.aggregate(value, evaluate=evaluate)
         self.value = value.item()
         compare_func = min if self.mode == "min" else max
         self.mode_value = compare_func(self.mode_value, self.value)

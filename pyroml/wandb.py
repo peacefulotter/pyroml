@@ -3,6 +3,7 @@ import time
 import pandas as pd
 
 from .utils import get_lr
+from .logger import Logger
 
 
 class Wandb:
@@ -11,6 +12,7 @@ class Wandb:
             config.wandb_project != None
         ), "You need to specify a project name in the config to be able to use WandB (config.wandb_project='my_project_name')"
         self.config = config
+        self.logger = Logger("WandB", config)
         self.start = -1
 
     def init(self, model, optimizer, criterion, scheduler):
@@ -28,10 +30,9 @@ class Wandb:
             classes_config["scheduler"] = scheduler.__class__.__name__
         wandb_config.update(classes_config)
 
-        if self.config.verbose:
-            print(
-                f"[WandB] Initializing wandb with project_name {self.config.wandb_project} and run name {run_name}"
-            )
+        self.logger.log(
+            f"Initializing wandb with project_name {self.config.wandb_project} and run name {run_name}"
+        )
 
         wandb.init(
             project=self.config.wandb_project,
