@@ -16,17 +16,13 @@ class Statistics:
         self.criterion = criterion
         self.scheduler = scheduler
         self.config = config
-        self.eval_loader = DataLoader(
-            eval_dataset,
-            shuffle=False,
-            pin_memory=config.device != "cpu",
-            batch_size=self.config.batch_size,
-            num_workers=self.config.eval_num_workers,
-        )
+        self.eval_dataset = eval_dataset
+
         self.lr = config.lr
 
         self.train_metrics = self.create_metrics()
         self.eval_metrics = self.create_metrics()
+
         self.logger = Logger("Statistics", config)
 
     def create_metrics(self):
@@ -42,6 +38,14 @@ class Statistics:
 
         device = self.config.device
         metric_values = [[] for _ in range(len(self.eval_metrics))]
+
+        self.eval_loader = DataLoader(
+            self.eval_dataset,
+            shuffle=False,
+            pin_memory=self.config.device != "cpu",
+            batch_size=self.config.eval_batch_size,
+            num_workers=self.config.eval_num_workers,
+        )
 
         for i, (data, target) in enumerate(self.eval_loader):
             if (
