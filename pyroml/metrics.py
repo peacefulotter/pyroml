@@ -12,14 +12,16 @@ class Metric:
         self.mode_value = float("inf") if mode == "min" else float("-inf")
 
     @torch.no_grad()
-    def compute(self, output, target, evaluate: bool = False):
+    def compute(self, output, target, **kwargs):
         """
         Computes the metric for the given output and target tensors.
 
         Args:
             output (torch.Tensor): The output tensor.
             target (torch.Tensor): The target tensor.
-            evaluate (bool): Whether in eval mode or not
+            kwargs (dict):
+                evaluate: Whether in eval mode or not
+                ...
 
         Returns:
             torch.Tensor: A tensor containing a single value corresponding to the computed metric.
@@ -27,15 +29,15 @@ class Metric:
         raise NotImplementedError
 
     @torch.no_grad()
-    def aggregate(self, value, evaluate: bool = False):
+    def aggregate(self, value, **kwargs):
         if isinstance(value, tuple) or isinstance(value, list):
             return torch.stack(value).mean()
         else:
             return value
 
     @torch.no_grad()
-    def update(self, value, evaluate: bool = False):
-        value = self.aggregate(value, evaluate=evaluate)
+    def update(self, value, **kwargs):
+        value = self.aggregate(value, **kwargs)
         self.value = value.item()
         compare_func = min if self.mode == "min" else max
         self.mode_value = compare_func(self.mode_value, self.value)
@@ -50,7 +52,7 @@ class Accuracy(Metric):
         super().__init__("acc", "max")
 
     @torch.no_grad()
-    def compute(self, output, target):
+    def compute(self, output, target, **kwargs):
         pred = output.argmax(dim=1, keepdim=True)
         correct = torch.sum(pred == target)
         return correct * 100.0 / output.shape[0]
@@ -62,12 +64,12 @@ class RMSE(Metric):
         self.size = 0
 
     @torch.no_grad()
-    def compute(self, output, target):
+    def compute(self, output, target, **kwargs):
         self.size += output.shape[0]
         return torch.sum((target - output) ** 2)
 
     @torch.no_grad()
-    def aggregate(self, value):
+    def aggregate(self, value, **kwargs):
         if isinstance(value, tuple) or isinstance(value, list):
             value = torch.stack(value)
         mse_mean = torch.sum(value) / self.size
@@ -81,5 +83,5 @@ class Loss(Metric):
         self.criterion = criterion
 
     @torch.no_grad()
-    def compute(self, output, target):
+    def compute(self, output, target, **kwargs):
         return self.criterion(output, target)
