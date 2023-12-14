@@ -1,5 +1,6 @@
 import time
 import torch
+import torch.nn as nn
 from collections import defaultdict
 
 
@@ -25,6 +26,21 @@ def get_lr(config, scheduler):
 
 def get_date():
     return time.strftime("%Y-%m-%d_%H:%M", time.gmtime(time.time()))
+
+
+# https://github.com/huggingface/transformers/blob/main/src/transformers/modeling_utils.py#L4788C1-L4799C21
+def unwrap_model(model: nn.Module) -> nn.Module:
+    """
+    Recursively unwraps a model from potential containers (as used in distributed training).
+
+    Args:
+        model (`torch.nn.Module`): The model to unwrap.
+    """
+    # since there could be multiple levels of wrapping, unwrap recursively
+    if hasattr(model, "module"):
+        return unwrap_model(model.module)
+    else:
+        return model
 
 
 class Record:

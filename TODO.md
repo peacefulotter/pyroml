@@ -1,3 +1,7 @@
+### FIXME:
+
+- !!! compile breaks safetensor load_model, see: https://github.com/huggingface/transformers/issues/25205
+
 ### TODO:
 
 - seed

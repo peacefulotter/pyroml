@@ -1,12 +1,13 @@
 import os
 import torch
 import torch.nn as nn
+from copy import deepcopy
 from torch.utils.data import DataLoader, RandomSampler
 import safetensors.torch as safetensors
 
 from .wandb import Wandb
 from .stats import Statistics
-from .utils import to_device, get_date, Callbacks
+from .utils import to_device, get_date, unwrap_model, Callbacks
 from .logger import Logger
 
 
@@ -53,10 +54,16 @@ class Trainer(Callbacks):
         )
 
     def save_model(self):
+        config = deepcopy(self.config)
+        config.metrics = [type(m).__name__ for m in config.metrics]
+        config.device = str(self.device)
+        config.optimizer = type(self.optimizer).__name__
+        config.criterion = type(self.criterion).__name__
+        config.scheduler = type(self.scheduler).__name__
         state = {
             "epoch": self.epoch,
             "iter": self.iteration,
-            "config": self.config,
+            "config": config.__dict__,
             "optimizer": self.optimizer.state_dict(),
             "scheduler": self.scheduler.state_dict()
             if self.scheduler != None
@@ -73,32 +80,53 @@ class Trainer(Callbacks):
             f"Saving model {self.config.name} at epoch {self.epoch}, iter {self.iteration} to {folder}",
             force=True,
         )
-        safetensors.save_file(
-            self.model.state_dict(), os.path.join(folder, "model.safetensors")
+        safetensors.save_model(
+            unwrap_model(self.model), os.path.join(folder, "model.safetensors")
         )
         torch.save(state, os.path.join(folder, "state.pt"))
         return folder
 
-    def _load_state_dict(self, weights, checkpoint, keep_states):
-        # self.epoch = checkpoint["epoch"]
-        # self.iteration = checkpoint["iter"]
-        self.model.load_state_dict(weights.to(self.device))
-        if keep_states:
-            self.optimizer.load_state_dict(checkpoint["optimizer"])
-            if self.config.scheduler != None:
-                self.scheduler.load_state_dict(checkpoint["scheduler"])
+    def _load_state_dict(self, checkpoint, resume):
+        if not resume:
+            return
+        self.epoch = checkpoint["epoch"]
+        self.iteration = checkpoint["iter"]
+        # self.model.load_state_dict(weights.to(self.device))
+        self.optimizer.load_state_dict(checkpoint["optimizer"])
+        if self.config.scheduler != None:
+            self.scheduler.load_state_dict(checkpoint["scheduler"])
 
     @staticmethod
-    def from_pretrained(model, config, folder, keep_states=True):
-        Logger("Trainer", config).log("Loading checkpoint from", folder, force=True)
-        weights = safetensors.load_file(
-            os.path.join(folder, "model.safetensors"), device="cpu"
+    def from_pretrained(model, config, folder, resume=True, strict=True):
+        """
+        Loads a pretrained model from a specified folder.
+
+        Args:
+            model (torch.nn.Module): The model to load the pretrained weights into.
+            config (Config): The training config.
+            folder (str): The folder path where the pretrained model is saved.
+            resume (bool, optional): Whether to resume training from the checkpoint. Defaults to True.
+            strict (bool, optional): Whether to strictly enforce the shape and type of the loaded weights. Defaults to True.
+
+        Returns:
+            Trainer: The trainer object with the pretrained model loaded.
+        """
+        logger = Logger("Trainer", config)
+        logger.log("Loading checkpoint from", folder, force=True)
+        # Load model weights
+        missing, unexpected = safetensors.load_model(
+            unwrap_model(model),
+            os.path.join(folder, "model.safetensors"),
+            strict=strict,
         )
+        if not strict:
+            logger.log("Loading weights: missing", missing, ", unexpected", unexpected)
+        # Load checkpoint config
         checkpoint = torch.load(os.path.join(folder, "state.pt"), map_location="cpu")
         # Don't use the checkpoint config as it contains erroneous data such as optimizer, scheduler represented as strings
         # Moreover, this allows to change the config between runs, even tho this is already possible from one training to another
         trainer = Trainer(model, config)
-        trainer._load_state_dict(weights, checkpoint, keep_states)
+        trainer._load_state_dict(checkpoint, resume)
         return trainer
 
     def on_batch_end(self, statistics, output, target, loss):

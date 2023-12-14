@@ -12,6 +12,10 @@ if __name__ == "__main__":
     ev_ds = DummyDataset(size=128)
     model = DummyModel()
 
+    print(model)
+    # print(model.module)
+    print(model.state_dict().keys())
+
     # Test dataset works with model
     x, y = tr_ds[0]
     output = model(x)
@@ -32,8 +36,11 @@ if __name__ == "__main__":
         wandb_project="pyro_main_test",
         evaluate_every=10,
         verbose=False,
-        wandb=True,
+        wandb=False,
+        compile=False,
     )
     trainer = Trainer(model, config)
     trainer.add_callback("on_epoch_end", on_epoch_end)
+    _, cp_path = trainer.fit(tr_ds, ev_ds)
+    trainer = Trainer.from_pretrained(model, config, cp_path, resume=True)
     trainer.fit(tr_ds, ev_ds)

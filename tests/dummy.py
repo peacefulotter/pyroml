@@ -13,7 +13,7 @@ from pyroml.trainer import Trainer
 class DummyModel(nn.Module):
     def __init__(self, in_dim=16):
         super().__init__()
-        self.module = nn.Sequential(
+        self.seq = nn.Sequential(
             nn.Linear(in_dim, in_dim * 2),
             nn.LeakyReLU(),
             nn.Linear(in_dim * 2, in_dim),
@@ -21,7 +21,7 @@ class DummyModel(nn.Module):
         )
 
     def forward(self, x):
-        return self.module(x)
+        return self.seq(x)
 
 
 class DummyDataset(Dataset):
@@ -61,5 +61,5 @@ if __name__ == "__main__":
     )
     trainer = Trainer(model, config)
     _, cp_path = trainer.fit(ds)
-    new_trainer = Trainer.from_pretrained(model, config, cp_path, keep_states=False)
+    new_trainer = Trainer.from_pretrained(model, config, cp_path, resume=False)
     new_trainer.fit(ds)

@@ -31,7 +31,7 @@ class Wandb:
         wandb_config.update(classes_config)
 
         self.logger.log(
-            f"Initializing wandb with project_name {self.config.wandb_project} and run name {run_name}"
+            f"Setting project_name {self.config.wandb_project} and run name {run_name}"
         )
 
         wandb.init(

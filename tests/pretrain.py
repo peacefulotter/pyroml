@@ -9,6 +9,7 @@ from pyroml.trainer import Trainer
 from pyroml.config import Config
 
 if __name__ == "__main__":
+    # FIXME: outdated
     in_dim = 16
     model = DummyModel(in_dim=in_dim)
     ds = DummyDataset(size=8, in_dim=in_dim)
