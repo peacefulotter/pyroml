@@ -57,8 +57,9 @@ if __name__ == "__main__":
         num_workers=0,
         evaluate=False,
         wandb=False,
+        verbose=True,
     )
     trainer = Trainer(model, config)
-    _, cp_path = trainer.run(ds)
+    _, cp_path = trainer.fit(ds)
     new_trainer = Trainer.from_pretrained(model, config, cp_path, keep_states=False)
-    new_trainer.run(ds)
+    new_trainer.fit(ds)

@@ -6,7 +6,7 @@ with open("README.md", "r") as f:
 
 setup(
     name="pyroml",
-    version="0.0.11",
+    version="0.0.12",
     author="Nathan Maire",
     author_email="nathan.maire@epfl.ch",
     description="Machine Learning tool allowing plug-and-play training for pytorch models",
@@ -15,10 +15,5 @@ setup(
     license="MIT",
     packages=find_packages(where=".", exclude=["tests"]),
     url="https://github.com/peacefulotter/pyroml",
-    install_requires=[
-        "torch",
-        "pandas",
-        "numpy",
-        "wandb",
-    ],
+    install_requires=["torch", "pandas", "numpy", "wandb", "safetensors"],
 )

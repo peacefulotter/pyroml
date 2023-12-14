@@ -36,4 +36,4 @@ if __name__ == "__main__":
     )
     trainer = Trainer(model, config)
     trainer.add_callback("on_epoch_end", on_epoch_end)
-    trainer.run(tr_ds, ev_ds)
+    trainer.fit(tr_ds, ev_ds)

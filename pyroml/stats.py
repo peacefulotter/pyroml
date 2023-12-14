@@ -7,7 +7,7 @@ from .logger import Logger
 
 
 class Statistics:
-    def __init__(self, model, criterion, scheduler, config, eval_dataset=None):
+    def __init__(self, model, criterion, scheduler, config, device, eval_dataset=None):
         assert (config.evaluate and eval_dataset != None) or (
             not config.evaluate
         ), "You have chosen to evaluate the model in the Config, but no evaluation dataset is passed"
@@ -16,6 +16,7 @@ class Statistics:
         self.criterion = criterion
         self.scheduler = scheduler
         self.config = config
+        self.device = device
         self.eval_dataset = eval_dataset
 
         self.lr = config.lr
@@ -35,13 +36,12 @@ class Statistics:
         self.logger.log("Evaluating")
         self.model.eval()
 
-        device = self.config.device
         metric_values = [[] for _ in range(len(self.eval_metrics))]
 
         self.eval_loader = DataLoader(
             self.eval_dataset,
             shuffle=False,
-            pin_memory=self.config.device != "cpu",
+            pin_memory=self.device != "cpu",
             batch_size=self.config.eval_batch_size,
             num_workers=self.config.eval_num_workers,
         )
@@ -52,7 +52,7 @@ class Statistics:
                 and i >= self.config.max_eval_iterations
             ):
                 break
-            data, target = to_device(data, device), to_device(target, device)
+            data, target = to_device(data, self.device), to_device(target, self.device)
             output = self.model(data)
 
             for i, metric in enumerate(self.eval_metrics):
@@ -69,18 +69,16 @@ class Statistics:
         return eval_stats
 
     def log_stats(self, stats, epoch, iteration):
-        log = f"[{epoch:03d} | {iteration:05d}:{self.config.max_iterations:05d}]"
+        log = f"[epoch] {epoch:03d} | [iter] {iteration:05d}:{self.config.max_iterations:05d}"
         for metric in self.train_metrics:
             log += f" | [{metric.name}] tr: {stats['train'][metric.name]:.4f}"
             if "eval" in stats:
                 log += f", ev: {stats['eval'][metric.name]:.4f}"
-        log += f" | [Lr] {stats['lr']:.4f}"
+        log += f" | [lr] {stats['lr']:.4f}"
         self.logger.log(log)
 
     @torch.no_grad()
     def register(self, train_output, train_target, train_loss, epoch, iteration):
-        # FIXME: move to device?
-
         train_stats = {}
         for metric in self.train_metrics:
             value = (

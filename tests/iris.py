@@ -101,7 +101,7 @@ if __name__ == "__main__":
     )
 
     trainer = Trainer(model, config)
-    trainer.run(dataset)
+    trainer.fit(dataset)
 
     # predict_out = model(test_X)
     # _, predict_y = torch.max(predict_out, 1)
