@@ -52,12 +52,14 @@ if __name__ == "__main__":
 
     config = Config(
         name="dummy",
-        max_iterations=4,
-        batch_size=2,
+        max_iterations=52,
+        lr=0.001,
+        batch_size=16,
         num_workers=0,
         evaluate=False,
         wandb=False,
         verbose=True,
+        compile=False,
     )
     trainer = Trainer(model, config)
     _, cp_path = trainer.fit(ds)
