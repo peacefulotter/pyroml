@@ -52,7 +52,7 @@ if __name__ == "__main__":
 
     config = Config(
         name="dummy",
-        max_iterations=52,
+        max_iterations=256,
         lr=0.001,
         batch_size=16,
         num_workers=0,
@@ -63,5 +63,5 @@ if __name__ == "__main__":
     )
     trainer = Trainer(model, config)
     _, cp_path = trainer.fit(ds)
-    new_trainer = Trainer.from_pretrained(model, config, cp_path, resume=False)
+    new_trainer = Trainer.from_pretrained(trainer.model, config, cp_path, resume=False)
     new_trainer.fit(ds)

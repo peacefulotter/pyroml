@@ -12,6 +12,9 @@ from .logger import Logger
 
 
 class Trainer(Callbacks):
+    MODEL_FILE = "model.safetensors"
+    STATE_FILE = "state.pt"
+
     def __init__(self, model, config):
         self.config = config
         self.logger = Logger("Trainer", config)
@@ -24,10 +27,7 @@ class Trainer(Callbacks):
         self.logger.log(f"Set on device {self.device}", force=True)
 
         self.model = model.to(device=self.device)
-        if self.config.compile:
-            self.logger.log(f"Compiling model...", force=True)
-            self.model = torch.compile(self.model)
-            self.logger.log(f"Model compiled!", force=True)
+        self.compile_model()
 
         self.epoch = 0
         self.iteration = 0
@@ -45,6 +45,20 @@ class Trainer(Callbacks):
             self.wandb = Wandb(config)
 
         Callbacks.__init__(self)
+
+    def compile_model(self):
+        if not self.config.compile:
+            return
+
+        if isinstance(self.model, torch._dynamo.OptimizedModule):
+            self.logger.log(
+                "Skipping compilation because given model is already compiled"
+            )
+            return
+
+        self.logger.log(f"Compiling model...", force=True)
+        self.model = torch.compile(self.model)
+        self.logger.log(f"Model compiled!", force=True)
 
     @staticmethod
     def get_checkpoint_path(config, date, epoch, iteration):
@@ -80,10 +94,8 @@ class Trainer(Callbacks):
             f"Saving model {self.config.name} at epoch {self.epoch}, iter {self.iteration} to {folder}",
             force=True,
         )
-        safetensors.save_model(
-            unwrap_model(self.model), os.path.join(folder, "model.safetensors")
-        )
-        torch.save(state, os.path.join(folder, "state.pt"))
+        safetensors.save_model(self.model, os.path.join(folder, Trainer.MODEL_FILE))
+        torch.save(state, os.path.join(folder, Trainer.STATE_FILE))
         return folder
 
     def _load_state_dict(self, checkpoint, resume):
@@ -113,20 +125,33 @@ class Trainer(Callbacks):
         """
         logger = Logger("Trainer", config)
         logger.log("Loading checkpoint from", folder, force=True)
-        # Load model weights
-        missing, unexpected = safetensors.load_model(
-            unwrap_model(model),
-            os.path.join(folder, "model.safetensors"),
-            strict=strict,
-        )
-        if not strict:
-            logger.log("Loading weights: missing", missing, ", unexpected", unexpected)
+
         # Load checkpoint config
-        checkpoint = torch.load(os.path.join(folder, "state.pt"), map_location="cpu")
+        checkpoint = torch.load(
+            os.path.join(folder, Trainer.STATE_FILE), map_location="cpu"
+        )
         # Don't use the checkpoint config as it contains erroneous data such as optimizer, scheduler represented as strings
         # Moreover, this allows to change the config between runs, even tho this is already possible from one training to another
         trainer = Trainer(model, config)
         trainer._load_state_dict(checkpoint, resume)
+
+        # Load model weights
+        # Required to be done after creating the trainer if the model has been compiled and saved
+        # than the model passed as parameter needs to be compiled before as well, and Trainer init makes sure of it
+        missing, unexpected = safetensors.load_model(
+            trainer.model,
+            os.path.join(folder, Trainer.MODEL_FILE),
+            strict=strict,
+        )
+        if not strict:
+            logger.log(
+                "Loading weights: missing",
+                missing,
+                ", unexpected",
+                unexpected,
+                force=True,
+            )
+
         return trainer
 
     def on_batch_end(self, statistics, output, target, loss):
