@@ -64,3 +64,10 @@ class Stage(Enum):
     TRAIN = "train"
     VAL = "val"
     TEST = "test"
+
+    def to_progress(self):
+        return {
+            Stage.TRAIN: "Training",
+            Stage.VAL: "Validation",
+            Stage.TEST: "Testing",
+        }[self]

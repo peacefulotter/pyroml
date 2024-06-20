@@ -1,4 +1,6 @@
+from torch.utils.data import DataLoader
 from rich.progress import (
+    TaskID,
     BarColumn,
     TextColumn,
     TimeElapsedColumn,
@@ -11,37 +13,51 @@ from rich.progress import (
 from pyroml.utils import Stage
 
 
-class Progress(ProgressBar):
+class Progress:
     def __init__(self):
-        super().__init__(
-            TextColumn("\t[progress.percentage]{task.percentage:>3.0f}%"),
+        self.bar = ProgressBar(
+            TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             MofNCompleteColumn(),
             TextColumn("•"),
             TimeElapsedColumn(),
-            TextColumn("•"),
+            TextColumn("/"),
             TimeRemainingColumn(),
+            TextColumn("•"),
+            TextColumn("{task.fields[metrics]}"),
         )
-        self.tr_task = self.bar.add_task("Epoch 0", total=len(self.train_loader))
-        self.ev_task = self.bar.add_task("Evaluating", total=len(self.train_loader))
+        self.tr_task: TaskID = None
+        self.ev_task: TaskID = None
+        self.current_task: TaskID = None
 
-    def _get_task_from_stage(self, stage: Stage):
+    def new_epoch(self, epoch):
+        self.tr_task = self.bar.add_task(
+            f"Epoch {epoch}" + f" - {Stage.TRAIN.to_progress()}", metrics=""
+        )
+        self.current_task = self.tr_task
+
+    def set_stage(self, stage: Stage, loader: DataLoader = None):
         if stage == Stage.TRAIN:
-            return self.tr_task
-        elif stage == Stage.EVAL:
-            return self.ev_task
-        else:
-            raise ValueError("Invalid stage")
+            if self.ev_task is None:
+                self.bar.update(self.tr_task, total=len(loader))
+            else:
+                self.bar.update(self.ev_task, visible=False)
+                self.ev_task = None
+            self.current_task = self.tr_task
+        elif stage == Stage.VAL:
+            self.ev_task = self.bar.add_task(
+                description=stage.to_progress(), total=len(loader), metrics=""
+            )
+            self.current_task = self.ev_task
 
-    def start(self, stage: Stage, loader):
-        super().start()
-        task = self._get_task_from_stage(stage)
-        self.update(task, total=len(loader))
+    def _parse_metrics(self, metrics):
+        return " ".join([f"{k}: {v:.4f}" for k, v in metrics.items()])
 
-    def update(self, stage: Stage, *args, **kwargs):
-        task = self._get_task_from_stage(stage)
-        self.update(task, *args, **kwargs)
+    def advance(self, metrics={}):
+        kwargs = {}
+        kwargs["metrics"] = self._parse_metrics(metrics)
+        kwargs["advance"] = 1
+        self.bar.update(self.current_task, **kwargs)
 
-    def stop(self, stage: Stage):
-        task = self._get_task_from_stage(stage)
-        self.stop(task)
+    def stop(self):
+        self.bar.console.print("stopping " + str(self.current_task))
