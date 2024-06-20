@@ -1,6 +1,8 @@
 import time
 import torch
 import torch.nn as nn
+
+from enum import Enum
 from collections import defaultdict
 
 
@@ -43,18 +45,6 @@ def unwrap_model(model: nn.Module) -> nn.Module:
         return model
 
 
-class Record:
-    def __init__(self, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-
-    def __str__(self):
-        return f"Config({str(self.__dict__)[1:-1]})"
-
-    def __repr__(self):
-        return self.__str__()
-
-
 class Callbacks:
     def __init__(self):
         self.callbacks = defaultdict(list)
@@ -68,3 +58,9 @@ class Callbacks:
     def trigger_callbacks(self, onevent: str, **kwargs):
         for callback in self.callbacks.get(onevent, []):
             callback(self, **kwargs)
+
+
+class Stage(Enum):
+    TRAIN = "train"
+    VAL = "val"
+    TEST = "test"

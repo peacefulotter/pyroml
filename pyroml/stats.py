@@ -1,19 +1,17 @@
 import torch
 from torch.utils.data import DataLoader
 
-from .metrics import Loss
 from .utils import to_device, get_lr
 from .logger import Logger
 
 
 class Statistics:
-    def __init__(self, model, criterion, scheduler, config, device, eval_dataset=None):
+    def __init__(self, model, scheduler, config, device, eval_dataset=None):
         assert (config.evaluate and eval_dataset != None) or (
             not config.evaluate
         ), "You have chosen to evaluate the model in the Config, but no evaluation dataset is passed"
 
         self.model = model
-        self.criterion = criterion
         self.scheduler = scheduler
         self.config = config
         self.device = device
@@ -21,22 +19,17 @@ class Statistics:
 
         self.lr = config.lr
 
-        self.train_metrics = self.create_metrics()
-        self.eval_metrics = self.create_metrics()
+        self.tr_metrics = self.create_metrics()
+        self.ev_metrics = self.create_metrics()
 
         self.logger = Logger("Statistics", config)
-
-    def create_metrics(self):
-        metrics = [m for m in self.config.metrics]
-        metrics.append(Loss(self.criterion))
-        return metrics
 
     @torch.no_grad()
     def evaluate(self):
         self.logger.log("Evaluating")
         self.model.eval()
 
-        metric_values = [[] for _ in range(len(self.eval_metrics))]
+        metric_values = [[] for _ in range(len(self.ev_metrics))]
 
         self.eval_loader = DataLoader(
             self.eval_dataset,

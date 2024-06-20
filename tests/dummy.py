@@ -8,9 +8,11 @@ sys.path.append("..")
 
 from pyroml.config import Config
 from pyroml.trainer import Trainer
+from pyroml.model import PyroModel
+from pyroml.utils import Stage
 
 
-class DummyModel(nn.Module):
+class DummyModel(PyroModel):
     def __init__(self, in_dim=16):
         super().__init__()
         self.seq = nn.Sequential(
@@ -19,9 +21,16 @@ class DummyModel(nn.Module):
             nn.Linear(in_dim * 2, in_dim),
             nn.LeakyReLU(),
         )
+        self.criterion = nn.MSELoss()
 
     def forward(self, x):
         return self.seq(x)
+
+    def step(self, batch, stage: Stage):
+        x, y = batch
+        pred = self(x)
+        loss = self.criterion(pred, y)
+        return loss
 
 
 class DummyDataset(Dataset):

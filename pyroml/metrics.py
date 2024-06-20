@@ -1,87 +1,26 @@
 import torch
-
-# TODO: from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-# FIXME: move to device?
+from torchmetrics import Metric
 
 
-class Metric:
-    def __init__(self, name, mode):
+class PyroMetric(Metric):
+    def __init__(self, name, best_func, keep_history=False):
         self.name = name
-        self.mode = mode
-        self.value = 0
-        self.mode_value = float("inf") if mode == "min" else float("-inf")
+        self.best_func = best_func
+        self.keep_history = keep_history
 
-    @torch.no_grad()
-    def compute(self, output, target, **kwargs):
-        """
-        Computes the metric for the given output and target tensors.
+        self.value = torch.nan
+        self.best_value = torch.nan
 
-        Args:
-            output (torch.Tensor): The output tensor.
-            target (torch.Tensor): The target tensor.
-            kwargs (dict):
-                evaluate: Whether in eval mode or not
-                ...
+        self.history_value = []
+        self.history_best_value = []
 
-        Returns:
-            torch.Tensor: A tensor containing a single value corresponding to the computed metric.
-        """
-        raise NotImplementedError
-
-    @torch.no_grad()
-    def aggregate(self, value, **kwargs):
-        if isinstance(value, tuple) or isinstance(value, list):
-            return torch.stack(value).mean()
-        else:
-            return value
-
-    @torch.no_grad()
     def update(self, value, **kwargs):
-        value = self.aggregate(value, **kwargs)
-        self.value = value.item()
-        compare_func = min if self.mode == "min" else max
-        self.mode_value = compare_func(self.mode_value, self.value)
-        return {
-            self.name: self.value,
-            f"{self.mode}_{self.name}": self.mode_value,
-        }
+        self.best_value = self.best_func(value, self.value)
+        self.value = value
+
+        self.history_value.append(value)
+        self.history_best_value.append(self.best_value)
 
 
-class Accuracy(Metric):
-    def __init__(self):
-        super().__init__("acc", "max")
-
-    @torch.no_grad()
-    def compute(self, output, target, **kwargs):
-        pred = output.argmax(dim=1, keepdim=True)
-        correct = torch.sum(pred == target)
-        return correct * 100.0 / output.shape[0]
-
-
-class RMSE(Metric):
-    def __init__(self):
-        super().__init__("rmse", "min")
-        self.size = 0
-
-    @torch.no_grad()
-    def compute(self, output, target, **kwargs):
-        self.size += output.shape[0]
-        return torch.sum((target - output) ** 2)
-
-    @torch.no_grad()
-    def aggregate(self, value, **kwargs):
-        if isinstance(value, tuple) or isinstance(value, list):
-            value = torch.stack(value)
-        mse_mean = torch.sum(value) / self.size
-        self.size = 0
-        return torch.sqrt(mse_mean)
-
-
-class Loss(Metric):
-    def __init__(self, criterion):
-        super().__init__("loss", "min")
-        self.criterion = criterion
-
-    @torch.no_grad()
-    def compute(self, output, target, **kwargs):
-        return self.criterion(output, target)
+# TODO: use metric.__dict__ for logs / wandb?
+# TODO: what to do for metrics that are not scalars, especially ones that have multiple fields such as e.g. (fn, ft, tn, tp)?

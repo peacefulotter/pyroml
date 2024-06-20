@@ -1,6 +1,7 @@
 from .utils import get_date
 
 
+# TODO: incorporate Logger with logging package and/or rich(.progress?)
 class Logger:
     def __init__(self, name, config):
         self.name = name
