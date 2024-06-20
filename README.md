@@ -2,6 +2,14 @@
 
 🔥 Machine Learning framework allowing plug-and-play training for pytorch models
 
+-   ⚡ Lightning inspired
+-   💾 Support for wandb and checkpoints out of the box
+-   📊 Pretty logs and metrics
+
+### Requirements
+
+-   Python 3.10 or newer
+
 ### Installation
 
 ```shell
@@ -21,10 +29,3 @@ $ cd tests
 $ python main.py # this will launch the training, follow the wandb link to access the plots
 $ python pretrain.py # will load the last checkpoint and compute mse on a small part of the dataset, outputs True if model predicts correctly!
 ```
-
-### Done
-
-- Metrics, with support for custom metrics
-- WandB
-- Checkpoints
-- Load pretrained models from checkpoints
