@@ -1,10 +1,10 @@
 # 🔥 pyro
 
-<b>A Machine Learning framework allowing plug-and-play training for pytorch models<b>
+<b style='font-size:16px'>A Machine Learning framework allowing plug-and-play training for pytorch models</b>
 
--   ⚡ Lightning inspired
--   💾 Support for wandb and checkpoints out of the box
--   📊 Pretty logs and metrics
+-   ⚡ <b>Lightning</b> inspired
+-   💾 Support for <b>wandb</b> and <b>checkpoints</b> out of the box
+-   📊 Pretty <b>logs</b> and <b>metrics</b>
 
 ## Requirements
 
