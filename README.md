@@ -1,6 +1,6 @@
-# pyroml
+# 🔥 pyro
 
-🔥 Machine Learning framework allowing plug-and-play training for pytorch models
+<b>A Machine Learning framework allowing plug-and-play training for pytorch models<b>
 
 -   ⚡ Lightning inspired
 -   💾 Support for wandb and checkpoints out of the box
