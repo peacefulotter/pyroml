@@ -6,11 +6,17 @@
 -   💾 Support for wandb and checkpoints out of the box
 -   📊 Pretty logs and metrics
 
-### Requirements
+## Requirements
 
 -   Python 3.10 or newer
 
-### Installation
+## Installation
+
+```shell
+pip install pyroml
+```
+
+### Locally
 
 ```shell
 $ git clone https://github.com/peacefulotter/pyroml.git
@@ -22,7 +28,7 @@ $ source ./venv/bin/activate
 $ pip install -r requirements.txt
 ```
 
-#### Running tests
+### Running tests
 
 ```shell
 $ cd tests
