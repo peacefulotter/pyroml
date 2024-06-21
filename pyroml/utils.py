@@ -45,17 +45,32 @@ def unwrap_model(model: nn.Module) -> nn.Module:
         return model
 
 
-class Callbacks:
+class Callback(Enum):
+    ON_TRAIN_ITER_START = "on_train_iter_start"
+    ON_TRAIN_ITER_END = "on_train_iter_end"
+    ON_TRAIN_EPOCH_START = "on_train_epoch_start"
+    ON_TRAIN_EPOCH_END = "on_train_epoch_end"
+    ON_VAL_ITER_START = "on_val_iter_start"
+    ON_VAL_ITER_END = "on_val_iter_end"
+    ON_VAL_EPOCH_START = "on_val_epoch_start"
+    ON_VAL_EPOCH_END = "on_val_epoch_end"
+    ON_TEST_ITER_START = "on_test_iter_start"
+    ON_TEST_ITER_END = "on_test_iter_end"
+    ON_TEST_EPOCH_START = "on_test_epoch_start"
+    ON_TEST_EPOCH_END = "on_test_epoch_end"
+
+
+class CallbackHandler:
     def __init__(self):
         self.callbacks = defaultdict(list)
 
-    def add_callback(self, onevent: str, callback):
+    def add_callback(self, onevent: Callback, callback):
         self.callbacks[onevent].append(callback)
 
-    def set_callback(self, onevent: str, callback):
+    def set_callback(self, onevent: Callback, callback):
         self.callbacks[onevent] = [callback]
 
-    def trigger_callbacks(self, onevent: str, **kwargs):
+    def trigger_callbacks(self, onevent: Callback, **kwargs):
         for callback in self.callbacks.get(onevent, []):
             callback(self, **kwargs)
 
@@ -68,6 +83,13 @@ class Stage(Enum):
     def to_progress(self):
         return {
             Stage.TRAIN: "Training",
-            Stage.VAL: "Validation",
+            Stage.VAL: "Validating",
             Stage.TEST: "Testing",
+        }[self]
+
+    def to_prefix(self):
+        return {
+            Stage.TRAIN: "tr",
+            Stage.VAL: "ev",
+            Stage.TEST: "te",
         }[self]

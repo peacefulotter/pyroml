@@ -4,8 +4,16 @@ import torch
 import logging
 import safetensors.torch as safetensors
 
+from enum import Enum
+from pathlib import Path
 from copy import deepcopy
 from json import JSONEncoder
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import LRScheduler as Scheduler
+
+from pyroml.config import Config
+from pyroml.model import PyroModel
+from pyroml.utils import get_date
 
 
 class EncodeTensor(JSONEncoder):
@@ -18,28 +26,43 @@ class EncodeTensor(JSONEncoder):
 log = logging.getLogger(__name__)
 
 
-class Checkpoint:
-    MODEL_FILE = "model.safetensors"
-    STATE_FILE = "training_state.pt"
-    PARAM_FILE = "hparams.json"
+class CheckpointFilename(Enum):
+    MODEL = "model.safetensors"
+    STATE = "training_state.pt"
+    PARAM = "hparams.json"
 
-    @staticmethod
-    def get_checkpoint_path(config, date, epoch, iteration):
+
+class Checkpoint:
+    def __init__(
+        self,
+        config: Config,
+        model: PyroModel,
+        optimizer: Optimizer,
+        scheduler: Scheduler,
+    ):
+        self.config = config
+        self.model = model
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        self.date = get_date()
+        self.folder: Path | str = None
+
+    def get_cp_folder(self):
         return os.path.join(
-            config.checkpoint_folder,
-            f"{date}_{config.name}_epoch={epoch:03d}_iter={iteration:06d}",
+            self.config.checkpoint_folder,
+            f"{self.date}_{self.config.name}_epoch={self.epoch:03d}_iter={self.iteration:06d}",
         )
 
-    def save_model(self):
+    def _get_training_state(self):
         config = deepcopy(self.config)
         # TODO: store metrics value?
-        config.metrics = [type(m).__name__ for m in config.metrics]
+        # config.metrics = [type(m).__name__ for m in config.metrics]
         config.device = str(self.device)
         config.optimizer = type(self.optimizer).__name__
         config.scheduler = type(self.scheduler).__name__
-        training_state = {
+        state = {
             "epoch": self.epoch,
-            "iter": self.iteration,
+            "iteration": self.iteration,
             "config": config.__dict__,
             "optimizer": self.optimizer.state_dict(),
             "scheduler": (
@@ -47,34 +70,52 @@ class Checkpoint:
             ),
             "compiled": self._is_model_compiled(),
         }
+        return state
 
-        folder = Checkpoint.get_checkpoint_path(
-            self.config, self.date, self.epoch, self.iteration
-        )
-        os.makedirs(folder, exist_ok=True)
+    @staticmethod
+    def _get_filenames(folder):
+        return {fn: os.path.join(folder, fn.value) for fn in CheckpointFilename}
 
+    def _get_folder_and_filenames(self):
+        self.folder = self.get_cp_folder()
+        os.makedirs(self.folder, exist_ok=True)
+        filenames = Checkpoint._get_filenames(self.folder)
+        return self.folder, filenames
+
+    def save_model(self):
+        folder, filenames = self._get_folder_and_filenames()
         log.info(
             f"Saving model {self.config.name} at epoch {self.epoch}, iter {self.iteration} to {folder}"
         )
-        safetensors.save_model(self.model, os.path.join(folder, Checkpoint.MODEL_FILE))
-        torch.save(training_state, os.path.join(folder, Checkpoint.STATE_FILE))
-        with open(os.path.join(folder, Checkpoint.PARAM_FILE), "w") as f:
-            json.dump(self.model.hparams, f, cls=EncodeTensor)
 
-        return folder
+        # Saving model weights
+        safetensors.save_model(self.model, filenames[CheckpointFilename.MODEL])
 
-    def _load_state_dict(self, checkpoint, resume):
-        if not resume:
-            return
-        self.epoch = checkpoint["epoch"]
-        self.iteration = checkpoint["iter"]
-        # self.model.load_state_dict(weights.to(self.device))
-        self.optimizer.load_state_dict(checkpoint["optimizer"])
-        if self.config.scheduler != None:
-            self.scheduler.load_state_dict(checkpoint["scheduler"])
+        # Saving training state
+        tr_state = self._get_training_state()
+        torch.save(tr_state, filenames[CheckpointFilename.STATE])
+
+        # Saving model hyperparameters
+        # TODO: find a way to store and load hparams
+        # with open(filenames[CheckpointFilename.PARAM], "w") as f:
+        #    json.dump(self.model.hparams, f, cls=EncodeTensor)
+
+    def _load_state(self, state):
+        self.epoch = state["epoch"]
+        self.iteration = state["iteration"]
+        self.optimizer.load_state_dict(state["optimizer"])
+        if self.config.scheduler is not None:
+            self.scheduler.load_state_dict(state["scheduler"])
 
     @staticmethod
-    def from_pretrained(model, config, folder, resume=True, strict=True):
+    def from_pretrained(
+        model: PyroModel = None,
+        config: Config = None,
+        folder: Path | str = None,
+        resume=True,
+        strict=True,
+        trainer=None,
+    ):
         """
         Loads a pretrained model from a specified checkpoint folder.
 
@@ -88,22 +129,35 @@ class Checkpoint:
         Returns:
             Trainer: The trainer object with the pretrained model loaded.
         """
-        log.info(f"Loading checkpoint from {folder}")
+        if trainer is not None:
+            model, config, folder = (
+                trainer.model,
+                trainer.config,
+                trainer.folder,
+            )
+        elif model is None or config is None or folder is None:
+            raise ValueError(
+                "Either trainer or model, config and folder must be provided"
+            )
 
-        # Load checkpoint config
-        checkpoint = torch.load(
-            os.path.join(folder, Checkpoint.STATE_FILE), map_location="cpu"
-        )
+        log.info(f"Loading checkpoint from {folder}")
+        filenames = Checkpoint._get_filenames(folder)
+
+        # Load training state
+        state = torch.load(filenames[CheckpointFilename.STATE], map_location="cpu")
+        from pyroml.trainer import Trainer
+
         # Don't use the checkpoint config as it contains erroneous data such as optimizer, scheduler represented as strings
-        trainer = Trainer(model, config)
-        trainer._load_state_dict(checkpoint, resume)
+        trainer = trainer or Trainer(model, config)
+        if not resume:
+            trainer._load_state(state)
 
         # Load model weights
-        # Required to be done after creating the trainer if the model has been compiled and saved
-        # than the model passed as parameter needs to be compiled before as well, and Trainer init makes sure of it
+        # Must be done after creating the trainer if the model has been saved compiled
+        # In that case, the model passed as parameter also needs to be compiled before
         missing, unexpected = safetensors.load_model(
             trainer.model,
-            os.path.join(folder, Checkpoint.MODEL_FILE),
+            filenames[CheckpointFilename.MODEL],
             strict=strict,
         )
         if not strict:

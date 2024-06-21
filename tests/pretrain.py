@@ -4,7 +4,7 @@ sys.path.append("..")
 
 import torch
 import torch.nn as nn
-from dummy import DummyModel, DummyDataset
+from dummy import DummyRegressionModel, DummyRegressionDataset
 from pyroml.trainer import Trainer
 from pyroml.config import Config
 
@@ -14,8 +14,8 @@ if __name__ == "__main__":
     path = sys.argv[1]
 
     in_dim = 16
-    model = DummyModel(in_dim=in_dim)
-    ds = DummyDataset(size=1024, in_dim=in_dim)
+    model = DummyRegressionModel(in_dim=in_dim)
+    ds = DummyRegressionDataset(size=1024, in_dim=in_dim)
     config = Config(
         name="pyro_main_test_v2",
         max_iterations=256,

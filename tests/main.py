@@ -3,14 +3,14 @@ import torch
 
 sys.path.append("..")
 
-from dummy import DummyDataset, DummyModel
+from dummy import DummyRegressionDataset, DummyRegressionModel
 from pyroml.config import Config
 from pyroml.trainer import Trainer
 
 if __name__ == "__main__":
-    tr_ds = DummyDataset()
-    ev_ds = DummyDataset(size=128)
-    model = DummyModel()
+    tr_ds = DummyRegressionDataset(size=256)
+    ev_ds = DummyRegressionDataset(size=64)
+    model = DummyRegressionModel()
 
     # Test dataset works with model
     x, y = tr_ds[0]
@@ -31,23 +31,24 @@ if __name__ == "__main__":
     }
 
     config = Config(
-        name="pyro_main_test_v2",
-        max_iterations=max_iterations,
+        name="main_test",
         lr=lr,
-        batch_size=64,
-        metrics=[],
+        max_iterations=max_iterations,
+        batch_size=16,
         grad_norm_clip=None,
-        wandb_project="pyro_main_test",
-        evaluate_every=10,
+        wandb_project="pyro_test",
+        evaluate=True,
+        evaluate_every=2,
         scheduler=scheduler,
         scheduler_params=scheduler_params,
         verbose=False,
         wandb=False,
         compile=False,
+        num_workers=0,
     )
     trainer = Trainer(model, config)
     trainer.fit(tr_ds, ev_ds)
 
-    # TODO: not necessarily static, don't need to recreate a trainer
-    trainer = Trainer.from_pretrained(model, config, trainer.cp_path, resume=True)
+    # TODO: find better solution: not necessarily static, don't need to recreate a trainer
+    Trainer.from_pretrained(trainer=trainer, resume=False)
     trainer.fit(tr_ds, ev_ds)

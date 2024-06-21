@@ -7,6 +7,7 @@ from pyroml.utils import Stage
 from pyroml.metrics import PyroMetric
 
 StepData: TypeAlias = torch.Tensor | dict[torch.Tensor] | tuple[torch.Tensor]
+StepOutput: TypeAlias = torch.Tensor | dict[torch.Tensor]
 
 
 class PyroModel(nn.Module):
@@ -19,5 +20,5 @@ class PyroModel(nn.Module):
         self,
         batch: StepData,
         stage: Stage,
-    ) -> StepData:
+    ) -> StepOutput:
         raise NotImplementedError("a step function must be implemented for your model")

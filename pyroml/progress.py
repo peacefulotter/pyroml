@@ -32,30 +32,40 @@ class Progress:
 
     def new_epoch(self, epoch):
         self.tr_task = self.bar.add_task(
-            f"Epoch {epoch}" + f" - {Stage.TRAIN.to_progress()}", metrics=""
+            f"[blue]Epoch {epoch}[/blue] • {Stage.TRAIN.to_progress()}", metrics=""
         )
         self.current_task = self.tr_task
 
     def set_stage(self, stage: Stage, loader: DataLoader = None):
         if stage == Stage.TRAIN:
+            # Moving to training stage for the first time, update total
             if self.ev_task is None:
                 self.bar.update(self.tr_task, total=len(loader))
+            # Previous stage was validation, hide it
             else:
                 self.bar.update(self.ev_task, visible=False)
                 self.ev_task = None
             self.current_task = self.tr_task
-        elif stage == Stage.VAL:
+        # Moving to eval or test stage, create the task for it
+        else:
             self.ev_task = self.bar.add_task(
                 description=stage.to_progress(), total=len(loader), metrics=""
             )
             self.current_task = self.ev_task
 
-    def _parse_metrics(self, metrics):
-        return " ".join([f"{k}: {v:.4f}" for k, v in metrics.items()])
+    def _unroll_metrics(self, metrics, name=None):
+        if isinstance(metrics, dict):
+            name = "" if name is None else name + "_"
+            metrics = [
+                self._unroll_metrics(v, name=f"{name}{k}") for k, v in metrics.items()
+            ]
+            return " ".join(metrics)
+        name = name or "loss"
+        return f"{name}={metrics:.3f}"
 
     def advance(self, metrics={}):
         kwargs = {}
-        kwargs["metrics"] = self._parse_metrics(metrics)
+        kwargs["metrics"] = self._unroll_metrics(metrics)
         kwargs["advance"] = 1
         self.bar.update(self.current_task, **kwargs)
 
