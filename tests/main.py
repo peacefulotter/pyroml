@@ -10,6 +10,7 @@ from pyroml.trainer import Trainer
 if __name__ == "__main__":
     tr_ds = DummyRegressionDataset(size=256)
     ev_ds = DummyRegressionDataset(size=64)
+    te_ds = DummyRegressionDataset(size=64)
     model = DummyRegressionModel()
 
     # Test dataset works with model
@@ -49,6 +50,7 @@ if __name__ == "__main__":
     trainer = Trainer(model, config)
     trainer.fit(tr_ds, ev_ds)
 
-    # TODO: find better solution: not necessarily static, don't need to recreate a trainer
-    Trainer.from_pretrained(trainer=trainer, resume=False)
-    trainer.fit(tr_ds, ev_ds)
+    print(trainer.tracker.stats)
+
+    te_tracker = trainer.test(te_ds)
+    print(te_tracker.stats)
