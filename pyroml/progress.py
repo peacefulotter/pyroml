@@ -26,32 +26,32 @@ class Progress:
             TextColumn("•"),
             TextColumn("{task.fields[metrics]}"),
         )
-        self.tr_task: TaskID = None
-        self.ev_task: TaskID = None
+        self.tasks: object[Stage, TaskID] = {}
         self.current_task: TaskID = None
 
-    def new_epoch(self, epoch):
-        self.tr_task = self.bar.add_task(
-            f"[blue]Epoch {epoch}[/blue] • {Stage.TRAIN.to_progress()}", metrics=""
+    def add_stage(
+        self,
+        stage: Stage,
+        loader: DataLoader,
+        task_name: str = None,
+    ):
+        desc = task_name or stage.to_progress()
+        task = self.bar.add_task(
+            description=desc,
+            total=len(loader),
+            metrics="",
         )
-        self.current_task = self.tr_task
+        self.tasks[stage] = task
+        self.current_task = task
 
-    def set_stage(self, stage: Stage, loader: DataLoader = None):
-        if stage == Stage.TRAIN:
-            # Moving to training stage for the first time, update total
-            if self.ev_task is None:
-                self.bar.update(self.tr_task, total=len(loader))
-            # Previous stage was validation, hide it
-            else:
-                self.bar.update(self.ev_task, visible=False)
-                self.ev_task = None
-            self.current_task = self.tr_task
-        # Moving to eval or test stage, create the task for it
-        else:
-            self.ev_task = self.bar.add_task(
-                description=stage.to_progress(), total=len(loader), metrics=""
-            )
-            self.current_task = self.ev_task
+    def hide_stage(self, stage: Stage):
+        if stage in self.tasks:
+            self.bar.remove_task(self.tasks[stage])
+            del self.tasks[stage]
+
+    def set_stage(self, stage: Stage):
+        if stage in self.tasks:
+            self.current_task = self.tasks[stage]
 
     def _unroll_metrics(self, metrics, name=None):
         if isinstance(metrics, dict):

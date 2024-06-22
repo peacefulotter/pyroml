@@ -1,21 +1,27 @@
-import wandb
 import time
+import wandb
+import logging
 import pandas as pd
 
-from .utils import get_lr
-from .logger import Logger
+from torch.optim.optimizer import Optimizer
+from torch.optim.lr_scheduler import LRScheduler as Scheduler
+
+from pyroml.utils import get_lr
+from pyroml.model import PyroModel
+
+
+log = logging.getLogger(__name__)
 
 
 class Wandb:
     def __init__(self, config):
         assert (
             config.wandb_project != None
-        ), "You need to specify a project name in the config to be able to use WandB (config.wandb_project='my_project_name')"
+        ), "When config.wandb is set, you need to specify a project name too (config.wandb_project='my_project_name')"
         self.config = config
-        self.logger = Logger("WandB", config)
         self.start = -1
 
-    def init(self, model, optimizer, criterion, scheduler):
+    def init(self, model: PyroModel, optimizer: Optimizer, scheduler: Scheduler):
         self.scheduler = scheduler
 
         run_name = self.get_run_name(optimizer, scheduler)
@@ -24,13 +30,12 @@ class Wandb:
         classes_config = {
             "model": model.__class__.__name__,
             "optimizer": optimizer.__class__.__name__,
-            "criterion": criterion.__class__.__name__,
         }
         if scheduler != None:
             classes_config["scheduler"] = scheduler.__class__.__name__
         wandb_config.update(classes_config)
 
-        self.logger.log(
+        log.info(
             f"Setting project_name {self.config.wandb_project} and run name {run_name}"
         )
 

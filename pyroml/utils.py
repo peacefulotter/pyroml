@@ -1,3 +1,4 @@
+# %%
 import time
 import torch
 import torch.nn as nn
@@ -45,36 +46,6 @@ def unwrap_model(model: nn.Module) -> nn.Module:
         return model
 
 
-class Callback(Enum):
-    ON_TRAIN_ITER_START = "on_train_iter_start"
-    ON_TRAIN_ITER_END = "on_train_iter_end"
-    ON_TRAIN_EPOCH_START = "on_train_epoch_start"
-    ON_TRAIN_EPOCH_END = "on_train_epoch_end"
-    ON_VAL_ITER_START = "on_val_iter_start"
-    ON_VAL_ITER_END = "on_val_iter_end"
-    ON_VAL_EPOCH_START = "on_val_epoch_start"
-    ON_VAL_EPOCH_END = "on_val_epoch_end"
-    ON_TEST_ITER_START = "on_test_iter_start"
-    ON_TEST_ITER_END = "on_test_iter_end"
-    ON_TEST_EPOCH_START = "on_test_epoch_start"
-    ON_TEST_EPOCH_END = "on_test_epoch_end"
-
-
-class CallbackHandler:
-    def __init__(self):
-        self.callbacks = defaultdict(list)
-
-    def add_callback(self, onevent: Callback, callback):
-        self.callbacks[onevent].append(callback)
-
-    def set_callback(self, onevent: Callback, callback):
-        self.callbacks[onevent] = [callback]
-
-    def trigger_callbacks(self, onevent: Callback, **kwargs):
-        for callback in self.callbacks.get(onevent, []):
-            callback(self, **kwargs)
-
-
 class Stage(Enum):
     TRAIN = "train"
     VAL = "val"
@@ -93,3 +64,36 @@ class Stage(Enum):
             Stage.VAL: "ev",
             Stage.TEST: "te",
         }[self]
+
+
+def callback_factory(name: str):
+    def wrapper(stage: Stage):
+        return f"on_{stage.value}_{name}"
+
+    return wrapper
+
+
+class Callback(Enum):
+    ON_ITER_START = callback_factory("iter_start")
+    ON_ITER_END = callback_factory("iter_end")
+    ON_EPOCH_START = callback_factory("epoch_start")
+    ON_EPOCH_END = callback_factory("epoch_end")
+
+
+class CallbackHandler:
+    def __init__(self):
+        self.callbacks = defaultdict(list)
+
+    def add_callback(self, onevent: str, callback):
+        self.callbacks[onevent].append(callback)
+        return len(self.callbacks[onevent]) - 1
+
+    def set_callback(self, onevent: str, callback):
+        self.callbacks[onevent] = [callback]
+
+    def trigger_callback(self, onevent: str, **kwargs):
+        for callback in self.callbacks.get(onevent, []):
+            callback(self, **kwargs)
+
+    def remove_callback(self, onevent: str, index):
+        del self.callbacks[onevent][index]

@@ -3,14 +3,15 @@ import torch
 import logging
 import torch.nn as nn
 
+from typing import Callable
 from torch.utils.data import DataLoader, RandomSampler
 
 from pyroml.wandb import Wandb
 from pyroml.config import Config
 from pyroml.tracker import Tracker
-from pyroml.model import PyroModel
 from pyroml.progress import Progress
 from pyroml.checkpoint import Checkpoint
+from pyroml.model import PyroModel, StepOutput
 from pyroml.utils import to_device, get_date, Callback, CallbackHandler, Stage
 
 log = logging.getLogger(__name__)
@@ -21,6 +22,8 @@ class Trainer(Checkpoint, CallbackHandler):
         self.model = model
         self.config = config
 
+        if self.config.verbose:
+            log.setLevel(logging.INFO)
         if self.config.debug:
             log.setLevel(logging.DEBUG)
 
@@ -50,9 +53,6 @@ class Trainer(Checkpoint, CallbackHandler):
             self.wandb = Wandb(config)
 
         self.tracker = Tracker()
-
-        self.tr_loader: DataLoader = None
-        self.ev_loader: DataLoader = None
         self.progress: Progress = None
 
         CallbackHandler.__init__(self)
@@ -72,28 +72,37 @@ class Trainer(Checkpoint, CallbackHandler):
         self.model = torch.compile(self.model)
         log.info(f"Model compiled!")
 
-    # TODO: logs and statistics
-    # TODO: progress bar should reflects logged metrics
-    """def _log(self, ...):
-        
-        if self.config.wandb:
-            self.wandb.log(stats)"""
-
-    def _get_batch(self, data_loader, data_iter):
+    def _get_batch(
+        self,
+        stage: Stage,
+        data_loader: DataLoader,
+        data_iter,
+        progress: Progress,
+        epoch: int,
+        max_epochs: int,
+    ):
         try:
             batch = next(data_iter)
         except StopIteration:
-            self.trigger_callbacks(Callback.ON_TRAIN_EPOCH_END)
+            self.trigger_callback(Callback.ON_EPOCH_END(stage))
+
+            if max_epochs > 0 and epoch + 1 >= max_epochs:
+                return None, None, None
+
+            progress.new_epoch(epoch)
+            self._start_loop(stage, data_loader)
+
             data_iter = iter(data_loader)
             batch = next(data_iter)
-            self.epoch += 1
+            epoch += 1
 
         import time
 
         time.sleep(0.3)
 
         batch = to_device(batch, self.device)
-        return data_iter, batch
+
+        return data_iter, batch, epoch
 
     def _extract_loss(self, output):
         if isinstance(output, dict):
@@ -126,83 +135,109 @@ class Trainer(Checkpoint, CallbackHandler):
             self.scheduler.step()
         self.optimizer.zero_grad(set_to_none=True)
 
-    def _start_epoch(self, stage, loader):
-        self.progress.set_stage(stage, loader)
-        cb = (
-            Callback.ON_TRAIN_EPOCH_START
-            if stage == Stage.TRAIN
-            else Callback.ON_VAL_EPOCH_START
-        )
-        self.trigger_callbacks(cb)
+    def _generic_loop(
+        self,
+        stage: Stage,
+        loader: DataLoader,
+        tracker: Tracker,
+        progress: Progress,
+        max_epochs: int,
+        iterating_cb: Callable[[int, int], bool],
+        output_cb: Callable[[StepOutput], None] = None,
+        task_name: str = None,
+    ):
+        loader_iter = iter(loader)
 
-    @torch.no_grad()
-    def _validation_loop(self):
-        self.model.eval()
+        self.progress.add_stage(stage, loader, task_name)
+        self.trigger_callback(Callback.ON_EPOCH_START(stage))
 
-        self._start_epoch(Stage.VAL, self.ev_loader)
-        ev_loader_iter = iter(self.ev_loader)
-
+        epoch = 0
         iterations = 0
-        while iterations < len(self.ev_loader) and (
-            self.config.eval_max_iterations is None
-            or iterations < self.config.eval_max_iterations
-        ):
-            _, batch = self._get_batch(self.ev_loader, ev_loader_iter)
+        while iterating_cb(iterations, epoch):
+            _, batch, epoch = self._get_batch(
+                stage, loader, loader_iter, progress, epoch, max_epochs
+            )
+            if batch is None:
+                break
 
-            self.trigger_callbacks(Callback.ON_VAL_ITER_START)
+            self.trigger_callback(
+                Callback.ON_ITER_START(stage), iterations=iterations, epoch=epoch
+            )
 
-            output = self.model.step(batch, Stage.VAL)
+            output = self.model.step(batch, stage)
+            if output_cb:
+                output_cb(output)
 
-            self.trigger_callbacks(Callback.ON_VAL_ITER_END)
+            self.trigger_callback(
+                Callback.ON_ITER_END(stage), iterations=iterations, epoch=epoch
+            )
 
-            last_metrics = self.tracker.update(Stage.VAL, self.epoch, output)
+            last_metrics = tracker.update(stage, epoch, output)
+            if stage != Stage.TEST and self.config.wandb:
+                # TODO: don't log last_metrics, log step_metrics only I guess
+                # TODO: add iter, epoch, and other stuff to the log
+                self.wandb.log(last_metrics)
+
             self.progress.advance(metrics=last_metrics)
             iterations += 1
 
-        self.trigger_callbacks(Callback.ON_VAL_EPOCH_END)
+    @torch.no_grad()
+    def _validation_loop(self, ev_loader):
+        self.model.eval()
 
+        iterating_cb = lambda i, _: i < len(ev_loader) or (
+            self.config.eval_max_iterations is not None
+            and i < self.config.eval_max_iterations
+        )
+        self._generic_loop(
+            stage=Stage.VAL,
+            loader=ev_loader,
+            tracker=self.tracker,
+            progress=self.progress,
+            max_epochs=1,
+            iterating_cb=iterating_cb,
+        )
+
+        self.progress.hide_stage(Stage.VAL)
         self.progress.set_stage(Stage.TRAIN)
+
         self.model.train()
 
-    def _training_loop(self):
-        self.progress.new_epoch(self.epoch)
-        self._start_epoch(Stage.TRAIN, self.tr_loader)
-        tr_loader_iter = iter(self.tr_loader)
+    def _training_loop(self, tr_loader, ev_loader):
+        def iterating_cb(i: int, e: int):
+            cont = i < self.config.max_iterations
+            if cont and self.config.evaluate and i % self.config.evaluate_every == 0:
+                self._validation_loop(ev_loader)
+            return cont
 
-        while self.iteration < self.config.max_iterations:
-            if (
-                self.config.evaluate
-                and self.iteration % self.config.evaluate_every == 0
-            ):
-                self._validation_loop()
-
-            # Retrieve a new batch and memorize the epoch
-            old_epoch = self.epoch
-            tr_loader_iter, batch = self._get_batch(self.tr_loader, tr_loader_iter)
-
-            # In case the epoch has changed, either move on to the new epoch or exit if max_epochs is reached
-            if old_epoch != self.epoch:
-                if (
-                    self.config.max_epochs is None
-                    or self.epoch < self.config.max_epochs
-                ):
-                    self.progress.new_epoch(self.epoch)
-                    tr_loader_iter = self._start_epoch(Stage.TRAIN, self.tr_loader)
-                else:
-                    break
-
-            self.trigger_callbacks(Callback.ON_TRAIN_ITER_START)
-
-            output = self.model.step(batch, Stage.TRAIN)
-
+        def output_cb(output: StepOutput):
             loss = self._extract_loss(output)
             self._fit_model(loss)
 
-            self.trigger_callbacks(Callback.ON_TRAIN_ITER_END)
+        def on_iter_start(_, **kwargs):
+            self.iteration = kwargs["iterations"]
+            self.epoch = kwargs["epoch"]
 
-            last_metrics = self.tracker.update(Stage.TRAIN, self.epoch, output)
-            self.progress.advance(metrics=last_metrics)
-            self.iteration += 1
+        id = self.add_callback(Callback.ON_ITER_START(Stage.TRAIN), on_iter_start)
+
+        self.model.train()
+        self.model.to(self.device)
+
+        self._generic_loop(
+            stage=Stage.TRAIN,
+            loader=tr_loader,
+            tracker=self.tracker,
+            progress=self.progress,
+            max_epochs=self.config.max_epochs,
+            iterating_cb=iterating_cb,
+            output_cb=output_cb,
+            task_name="[blue]Epoch {epoch}[/blue]",
+        )
+
+        self.remove_callback(Callback.ON_ITER_START(Stage.TRAIN), id)
+
+        self.model.cpu()
+        self.model.eval()
 
     def fit(self, tr_dataset, ev_dataset=None):
         if self.config.evaluate and ev_dataset is None:
@@ -210,12 +245,7 @@ class Trainer(Checkpoint, CallbackHandler):
                 "You have chosen to evaluate the model, but no evaluation dataset is passed. Ignoring evaluation."
             )
 
-        self.date = get_date()
-
-        self.model.train()
-        self.model.to(device=self.device)
-
-        self.tr_loader = DataLoader(
+        tr_loader = DataLoader(
             tr_dataset,
             sampler=RandomSampler(tr_dataset, replacement=True),
             shuffle=False,
@@ -224,7 +254,7 @@ class Trainer(Checkpoint, CallbackHandler):
             num_workers=self.config.num_workers,
         )
 
-        self.ev_loader = (
+        ev_loader = (
             DataLoader(
                 ev_dataset,
                 shuffle=False,
@@ -236,20 +266,19 @@ class Trainer(Checkpoint, CallbackHandler):
             else None
         )
 
+        self.date = get_date()
+
         if self.config.wandb:
             self.wandb.init(self.model, self.optimizer, self.scheduler)
 
         self.progress = Progress()
         with self.progress.bar:
-            self._training_loop()
+            self._training_loop(tr_loader, ev_loader)
 
         self.save_model()
-        self.model.eval()
-        self.model.cpu()
 
     def test(self, dataset):
         self.model.eval()
-        self.model.to(device=self.device)
 
         progress = Progress()
         tracker = Tracker()
@@ -262,29 +291,17 @@ class Trainer(Checkpoint, CallbackHandler):
             num_workers=self.config.eval_num_workers,
         )
 
-        progress.set_stage(Stage.TEST, te_loader)
-        te_loader_iter = iter(te_loader)
-
-        self.trigger_callbacks(Callback.ON_TEST_EPOCH_START)
+        iterating_cb = lambda i, _: i < len(te_loader)
 
         with progress.bar:
-            while True:
-                old_epoch = self.epoch
-                te_loader_iter, batch = self._get_batch(te_loader, te_loader_iter)
-
-                if old_epoch != self.epoch:
-                    break
-
-                self.trigger_callbacks(Callback.ON_TEST_ITER_START)
-
-                output = self.model.step(batch, Stage.TEST)
-
-                self.trigger_callbacks(Callback.ON_TEST_ITER_END)
-
-                last_metrics = tracker.update(Stage.TEST, 0, output)
-                progress.advance(metrics=last_metrics)
-
-        self.trigger_callbacks(Callback.ON_TEST_EPOCH_END)
+            self._generic_loop(
+                stage=Stage.TEST,
+                loader=te_loader,
+                tracker=tracker,
+                progress=progress,
+                max_epochs=1,
+                iterating_cb=iterating_cb,
+            )
 
         self.model.cpu()
 
