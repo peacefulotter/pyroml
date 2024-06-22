@@ -7,7 +7,7 @@ class Config:
         self,
         name,
         lr=1e-4,
-        max_epochs=1,
+        max_epochs=-1,
         max_iterations=None,
         optimizer=Adam,
         optimizer_params=None,

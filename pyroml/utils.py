@@ -1,10 +1,15 @@
-# %%
+import os
 import time
 import torch
+import random
+import logging
+import numpy as np
 import torch.nn as nn
 
 from enum import Enum
 from collections import defaultdict
+
+log = logging.getLogger(__name__)
 
 
 def to_device(obj, device):
@@ -97,3 +102,12 @@ class CallbackHandler:
 
     def remove_callback(self, onevent: str, index):
         del self.callbacks[onevent][index]
+
+
+def seed_everything(seed):
+    log.info(f"Global seed set to {seed}")
+    os.environ["PL_GLOBAL_SEED"] = str(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)

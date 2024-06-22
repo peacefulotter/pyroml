@@ -89,16 +89,11 @@ class Trainer(Checkpoint, CallbackHandler):
             if max_epochs > 0 and epoch + 1 >= max_epochs:
                 return None, None, None
 
-            progress.new_epoch(epoch)
-            self._start_loop(stage, data_loader)
+            progress.add_stage(stage, data_loader)
 
             data_iter = iter(data_loader)
             batch = next(data_iter)
             epoch += 1
-
-        import time
-
-        time.sleep(0.3)
 
         batch = to_device(batch, self.device)
 
@@ -154,7 +149,7 @@ class Trainer(Checkpoint, CallbackHandler):
         epoch = 0
         iterations = 0
         while iterating_cb(iterations, epoch):
-            _, batch, epoch = self._get_batch(
+            loader_iter, batch, epoch = self._get_batch(
                 stage, loader, loader_iter, progress, epoch, max_epochs
             )
             if batch is None:
@@ -205,7 +200,7 @@ class Trainer(Checkpoint, CallbackHandler):
 
     def _training_loop(self, tr_loader, ev_loader):
         def iterating_cb(i: int, e: int):
-            cont = i < self.config.max_iterations
+            cont = self.config.max_iterations is None or i < self.config.max_iterations
             if cont and self.config.evaluate and i % self.config.evaluate_every == 0:
                 self._validation_loop(ev_loader)
             return cont
