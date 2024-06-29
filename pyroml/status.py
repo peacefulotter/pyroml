@@ -1,7 +1,7 @@
 from pyroml.utils import Stage
 
 
-class State:
+class Status:
     def __init__(self, stage: Stage):
         self.stage = stage
         self.epoch = 0

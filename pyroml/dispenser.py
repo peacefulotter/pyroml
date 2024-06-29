@@ -1,6 +1,6 @@
 from torch.utils.data import Dataset, DataLoader, RandomSampler
 
-from pyroml.state import State
+from pyroml.status import Status
 from pyroml.config import Config
 from pyroml.utils import Stage, Callback
 
@@ -13,7 +13,7 @@ class Dispenser:
         self.stage = stage
 
         self.loader = self._get_dataloader()
-        self.state = State(stage)
+        self.status = Status(stage)
 
     def _get_dataloader(self):
         is_training = self.stage == Stage.TRAIN
@@ -49,7 +49,7 @@ class Dispenser:
         self.trigger_callback(Callback.ON_EPOCH_START(self.stage))
 
         while True:
-            if max_steps and self.state.step >= max_steps:
+            if max_steps and self.status.step >= max_steps:
                 break
 
             try:
@@ -57,14 +57,14 @@ class Dispenser:
             except StopIteration:
                 self.trigger_callback(Callback.ON_EPOCH_END(self.stage))
 
-                if max_epochs is not None and self.state.epoch + 1 >= max_epochs:
+                if max_epochs is not None and self.status.epoch + 1 >= max_epochs:
                     break
 
                 data_iter = iter(self.loader)
                 batch = next(data_iter)
-                self.state.epoch += 1
+                self.status.epoch += 1
 
                 self.trigger_callback(Callback.ON_EPOCH_START(self.stage))
 
-            self.state.step += 1
+            self.status.step += 1
             yield batch

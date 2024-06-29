@@ -87,12 +87,13 @@ class Trainer(CallbackHandler):
 
         dispenser = Dispenser(self.config, dataset, stage)
 
-        progress.add_stage(stage, loader, task_name)
+        progress.add_stage(stage, dispenser.loader, task_name)
 
-        # TODO: Merge some callbacks, iterating_cb, and _get_batch. Make it return an iterator here
-        while iterating_cb(step, epoch):
+        for batch in dispenser.iterate():
 
-            self.trigger_callback(Callback.ON_ITER_START(stage), step=step, epoch=epoch)
+            self.trigger_callback(
+                Callback.ON_ITER_START(stage), status=dispenser.status
+            )
 
             with self.type_ctx:
                 output = self.model.step(batch, stage)
@@ -101,7 +102,7 @@ class Trainer(CallbackHandler):
 
             # Compute batch and epoch metrics
             metrics = self.tracker.update(
-                stage=stage, output=output, epoch=epoch, step=step
+                stage=stage, output=output, status=dispenser.status
             )
 
             # Advance the progress bar and log metrics
@@ -109,12 +110,9 @@ class Trainer(CallbackHandler):
 
             self.trigger_callback(
                 Callback.ON_ITER_END(stage),
-                step=step,
-                epoch=epoch,
+                status=dispenser.status,
                 metrics=metrics,
             )
-
-            step += 1
 
         self.trigger_callback(Callback.ON_END(stage))
 
