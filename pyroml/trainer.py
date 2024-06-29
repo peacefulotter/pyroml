@@ -4,14 +4,15 @@ import logging
 import torch.nn as nn
 
 from typing import Callable
+from torchmetrics import Metric
 from torch.utils.data import DataLoader, RandomSampler
 
 from pyroml.wandb import Wandb
 from pyroml.config import Config
-from pyroml.tracker import Tracker
+from pyroml.tracker import MetricsTracker
 from pyroml.progress import Progress
 from pyroml.checkpoint import Checkpoint
-from pyroml.model import PyroModel, StepOutput
+from pyroml.model import PyroModel, StepOutput, Step
 from pyroml.utils import to_device, get_date, Callback, CallbackHandler, Stage
 
 log = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ class Trainer(Checkpoint, CallbackHandler):
         if config.wandb:
             self.wandb = Wandb(config)
 
-        self.tracker = Tracker()
+        self.tracker = MetricsTracker()
         self.progress: Progress = None
 
         CallbackHandler.__init__(self)
@@ -102,17 +103,14 @@ class Trainer(Checkpoint, CallbackHandler):
     def _extract_loss(self, output):
         if isinstance(output, dict):
             return self._extract_loss(output["loss"])
-        elif isinstance(output, tuple) or isinstance(output, list):
-            return self._extract_loss(output[0])
         elif isinstance(output, torch.Tensor):
             return output
         else:
             raise ValueError(
-                "The return type of the model.step function should be a torch.Tensor, dict[torch.Tensor], or tuple[torch.Tensor]"
-                + "\nIn the case of returning a list or tuple, make sure the loss is a torch.Tensor located at the first position"
+                "The return type of the model.step function should be a torch.Tensor, or dict[torch.Tensor]"
             )
 
-    def _fit_model(self, loss):
+    def _fit_model(self, output: StepOutput):
         """
         - Backpropagate loss
         - Clip the gradients if necessary
@@ -120,6 +118,10 @@ class Trainer(Checkpoint, CallbackHandler):
         - Step the scheduler if available
         - Zero the gradients
         """
+        pred = output[Step.PRED]
+        target = output[Step.TARGET]
+        loss = self.config.loss(pred, target)
+
         loss.backward()
         if self.config.grad_norm_clip != None and self.config.grad_norm_clip != 0.0:
             nn.utils.clip_grad_norm_(
@@ -134,7 +136,7 @@ class Trainer(Checkpoint, CallbackHandler):
         self,
         stage: Stage,
         loader: DataLoader,
-        tracker: Tracker,
+        tracker: MetricsTracker,
         progress: Progress,
         max_epochs: int,
         iterating_cb: Callable[[int, int], bool],
@@ -150,7 +152,12 @@ class Trainer(Checkpoint, CallbackHandler):
         iterations = 0
         while iterating_cb(iterations, epoch):
             loader_iter, batch, epoch = self._get_batch(
-                stage, loader, loader_iter, progress, epoch, max_epochs
+                stage=stage,
+                data_loader=loader,
+                data_iter=loader_iter,
+                progress=progress,
+                epoch=epoch,
+                max_epochs=max_epochs,
             )
             if batch is None:
                 break
@@ -163,17 +170,25 @@ class Trainer(Checkpoint, CallbackHandler):
             if output_cb:
                 output_cb(output)
 
-            self.trigger_callback(
-                Callback.ON_ITER_END(stage), iterations=iterations, epoch=epoch
+            # Compute batch and epoch metrics
+            metrics = tracker.update(
+                stage=stage, output=output, epoch=epoch, step=iterations
             )
 
-            last_metrics = tracker.update(stage, epoch, output)
-            if stage != Stage.TEST and self.config.wandb:
-                # TODO: don't log last_metrics, log step_metrics only I guess
-                # TODO: add iter, epoch, and other stuff to the log
-                self.wandb.log(last_metrics)
+            # Register metrics to wandb
+            if self.config.wandb:
+                self.wandb.log(stage=stage, metrics=metrics)
 
-            self.progress.advance(metrics=last_metrics)
+            # Advance the progress bar and log metrics
+            self.progress.advance(stage=stage, metrics=metrics)
+
+            self.trigger_callback(
+                Callback.ON_ITER_END(stage),
+                iterations=iterations,
+                epoch=epoch,
+                metrics=metrics,
+            )
+
             iterations += 1
 
     @torch.no_grad()
@@ -205,10 +220,6 @@ class Trainer(Checkpoint, CallbackHandler):
                 self._validation_loop(ev_loader)
             return cont
 
-        def output_cb(output: StepOutput):
-            loss = self._extract_loss(output)
-            self._fit_model(loss)
-
         def on_iter_start(_, **kwargs):
             self.iteration = kwargs["iterations"]
             self.epoch = kwargs["epoch"]
@@ -225,7 +236,7 @@ class Trainer(Checkpoint, CallbackHandler):
             progress=self.progress,
             max_epochs=self.config.max_epochs,
             iterating_cb=iterating_cb,
-            output_cb=output_cb,
+            output_cb=self._fit_model,
             task_name="[blue]Epoch {epoch}[/blue]",
         )
 
@@ -276,7 +287,7 @@ class Trainer(Checkpoint, CallbackHandler):
         self.model.eval()
 
         progress = Progress()
-        tracker = Tracker()
+        tracker = MetricsTracker()
 
         te_loader = DataLoader(
             dataset,

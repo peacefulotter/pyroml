@@ -1,19 +1,28 @@
 import torch
 import torch.nn as nn
 
+from enum import Enum
 from typing import TypeAlias
+from torchmetrics import Metric
 
 from pyroml.utils import Stage
-from pyroml.metrics import PyroMetric
+
+
+class Step(Enum):
+    PRED = "pred"
+    METRIC = "metric"
+    TARGET = "target"
+
 
 StepData: TypeAlias = torch.Tensor | dict[torch.Tensor] | tuple[torch.Tensor]
-StepOutput: TypeAlias = torch.Tensor | dict[torch.Tensor]
+StepOutput: TypeAlias = dict[Step, torch.Tensor]
 
 
 class PyroModel(nn.Module):
 
-    def log(self, metric: PyroMetric, log: bool = True) -> None:
-        # TODO: connect this to trainer and update metric + prog bar
+    def configure_metrics(
+        self,
+    ) -> dict[Metric] | None:
         pass
 
     def step(
@@ -21,4 +30,4 @@ class PyroModel(nn.Module):
         batch: StepData,
         stage: Stage,
     ) -> StepOutput:
-        raise NotImplementedError("a step function must be implemented for your model")
+        raise NotImplementedError("a step method must be implemented for your model")

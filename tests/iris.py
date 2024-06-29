@@ -1,5 +1,6 @@
 # Inspired by https://github.com/yangzhangalmo/pytorch-iris/blob/master/main.py
 
+import os
 import torch
 import datasets
 import numpy as np
@@ -15,9 +16,9 @@ import sys
 sys.path.append("..")
 
 from pyroml.config import Config
-from pyroml.model import PyroModel
 from pyroml.trainer import Trainer
 from pyroml.utils import Stage, seed_everything
+from pyroml.model import PyroModel, StepData, Step
 
 
 class IrisNet(PyroModel):
@@ -31,31 +32,28 @@ class IrisNet(PyroModel):
             nn.Linear(mid_dim, 3),
             nn.Softmax(dim=1),
         )
-        self.loss = nn.CrossEntropyLoss()
 
-        self.metrics = {}
-        for stage in Stage:
-            self.metrics[stage] = {
-                "acc": Accuracy(task="multiclass", num_classes=3),
-                "pre": Precision(task="multiclass", num_classes=3),
-                "rec": Recall(task="multiclass", num_classes=3),
-            }
+    def configure_metrics(self):
+        return {
+            "pre": Precision(task="multiclass", num_classes=3),
+            "acc": Accuracy(task="multiclass", num_classes=3),
+            "rec": Recall(task="multiclass", num_classes=3),
+        }
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         return self.module(x)
 
-    def step(self, data, stage):
+    def step(self, data: tuple[torch.Tensor], stage: Stage):
         x, y = data
         preds = self(x)
-        loss = self.loss(preds, y)
 
-        y = y.argmax(dim=1)
-        preds = preds.argmax(dim=1)
+        # y = y.argmax(dim=1)
+        # preds = preds.argmax(dim=1)
 
-        metrics = {k: v(preds, y) for k, v in self.metrics[stage].items()}
-        metrics["loss"] = loss
-
-        return metrics
+        return {
+            Step.PRED: preds,
+            Step.TARGET: y,
+        }
 
 
 class IrisDataset(Dataset):
@@ -100,9 +98,12 @@ if __name__ == "__main__":
         x["Species"] = species.index(x["Species"])
         return x
 
-    ds = datasets.load_from_disk("iris-data")
-    # ds = datasets.load_dataset("scikit-learn/iris", split="train")
-    # ds.save_to_disk("iris-data")
+    IRIS_DATA_FOLDER = "iris-data"
+    if os.path.isdir(IRIS_DATA_FOLDER):
+        ds = datasets.load_from_disk(IRIS_DATA_FOLDER)
+    else:
+        ds = datasets.load_dataset("scikit-learn/iris", split="train")
+        ds.save_to_disk(IRIS_DATA_FOLDER)
 
     ds = ds.map(map_species)
     ds = ds.with_format("torch")
@@ -117,12 +118,13 @@ if __name__ == "__main__":
 
     config = Config(
         name="iris",
+        loss=nn.CrossEntropyLoss(),
         max_epochs=12,
         batch_size=16,
         lr=0.01,
         evaluate=True,
         evaluate_every=2,
-        wandb=False,
+        wandb=True,
         wandb_project="pyro_main_test",
         verbose=True,
         debug=True,
@@ -135,13 +137,3 @@ if __name__ == "__main__":
 
     te_tracker = trainer.test(te_ds)
     print(te_tracker.stats)
-
-    # predict_out = model(test_X)
-    # _, predict_y = torch.max(predict_out, 1)
-
-    # print 'prediction accuracy', accuracy_score(test_y.data, predict_y.data)
-
-    # print 'macro precision', precision_score(test_y.data, predict_y.data, average='macro')
-    # print 'micro precision', precision_score(test_y.data, predict_y.data, average='micro')
-    # print 'macro recall', recall_score(test_y.data, predict_y.data, average='macro')
-    # print 'micro recall', recall_score(test_y.data, predict_y.data, average='micro')

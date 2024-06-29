@@ -3,28 +3,43 @@ import sys
 sys.path.append("..")
 
 import torch
-import numpy as np
+from torch.utils.data import DataLoader
 
+from pyroml.utils import Stage, seed_everything
+from pyroml.tracker import MetricsTracker
 
-from random import random
-
-from pyroml.utils import Stage
-from pyroml.tracker import Tracker
+from dummy import DummyClassification, DummyClassificationDataset
 
 
 if __name__ == "__main__":
-    tracker = Tracker()
+    SEED = 42
+    seed_everything(SEED)
 
-    for epoch in range(3):
-        for i in range(10):
-            out = tracker.update(
-                Stage.TRAIN, epoch, {"loss": torch.tensor([random()]), "acc": random()}
-            )
-            print(out)
-        for i in range(2):
-            out = tracker.update(
-                Stage.VAL, epoch, {"loss": np.array([random()]), "f1": random()}
-            )
-            print(out)
+    model = DummyClassification()
+    dataset = DummyClassificationDataset()
+    loader = iter(DataLoader(dataset, batch_size=16, shuffle=True))
+    tracker = MetricsTracker(model)
 
-    print(tracker.stats)
+    def step(stage: Stage, epoch: int, step: int):
+        batch = next(loader)
+        out = model.step(batch, stage)
+        tracker.update(stage=stage, output=out, epoch=epoch, step=step)
+
+    with torch.no_grad():
+        for e in range(3):
+            for s in range(10):
+                step(Stage.TRAIN, e, s)
+            for s in range(2):
+                step(Stage.VAL, e, s)
+
+    print(tracker.records[Stage.TRAIN])
+    print(tracker.records[Stage.VAL])
+
+    print(tracker.metrics[Stage.TRAIN]["acc"])
+
+    """
+    from matplotlib import pyplot as plt
+    tracker.plot(Stage.TRAIN)
+    plt.show()
+    tracker.plot(Stage.VAL)
+    plt.show()"""

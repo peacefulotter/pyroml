@@ -4,24 +4,31 @@ from torch.utils.data import Dataset, DataLoader
 
 import sys
 
+from torchmetrics import Metric
+from torchmetrics.classification import BinaryAccuracy, BinaryPrecision, BinaryRecall
+
 sys.path.append("..")
 
-from pyroml.config import Config
-from pyroml.trainer import Trainer
-from pyroml.model import PyroModel
+from pyroml.model import PyroModel, Step
 from pyroml.utils import Stage
 
 
 class DummyClassification(PyroModel):
-    def __init__(self, in_dim=16):
+    def __init__(self):
         super().__init__()
         self.seq = nn.Sequential(
-            nn.Linear(in_dim, in_dim * 2),
+            nn.Linear(1, 16),
             nn.LeakyReLU(),
-            nn.Linear(in_dim * 2, in_dim),
-            nn.LeakyReLU(),
+            nn.Linear(16, 1),
+            nn.Sigmoid(),
         )
-        self.criterion = nn.MSELoss()
+
+    def configure_metrics(self) -> dict[Metric]:
+        return {
+            "acc": BinaryAccuracy(),
+            "pre": BinaryPrecision(),
+            "rec": BinaryRecall(),
+        }
 
     def forward(self, x):
         return self.seq(x)
@@ -29,8 +36,7 @@ class DummyClassification(PyroModel):
     def step(self, batch, stage: Stage):
         x, y = batch
         pred = self(x)
-        loss = self.criterion(pred, y)
-        return loss
+        return {Step.PRED: pred, Step.METRIC: torch.round(pred), Step.TARGET: y}
 
 
 class DummyRegressionModel(PyroModel):
@@ -42,7 +48,6 @@ class DummyRegressionModel(PyroModel):
             nn.Linear(in_dim * 2, in_dim),
             nn.LeakyReLU(),
         )
-        self.criterion = nn.MSELoss()
 
     def forward(self, x):
         return self.seq(x)
@@ -50,8 +55,7 @@ class DummyRegressionModel(PyroModel):
     def step(self, batch, stage: Stage):
         x, y = batch
         pred = self(x)
-        loss = self.criterion(pred, y)
-        return loss
+        return {Step.PRED: pred, Step.TARGET: y}
 
 
 class DummyRegressionDataset(Dataset):
@@ -64,34 +68,34 @@ class DummyRegressionDataset(Dataset):
 
     def __getitem__(self, idx):
         x = self.data[idx]
-        y = x**2 + 0.3 * x + 0.1
+        y = x**2 - 0.3 * x - 0.1
+        return x, y
+
+
+class DummyClassificationDataset(Dataset):
+    def __init__(self, size=1024, in_dim=16):
+        self.ds = DummyRegressionDataset(size, 1)
+
+    def __len__(self):
+        return len(self.ds)
+
+    def __getitem__(self, idx):
+        x, y = self.ds[idx]
+        y = torch.where(y > 0, 1, 0)
         return x, y
 
 
 if __name__ == "__main__":
-    ds = DummyRegressionDataset()
-    model = DummyRegressionModel()
-    loader = DataLoader(ds, batch_size=2, num_workers=0)
-    for x, y in loader:
-        print(x, y)
+
+    for model, ds in [
+        (DummyClassification(), DummyClassificationDataset()),
+        (DummyRegressionModel(), DummyRegressionDataset()),
+    ]:
+
+        loader = DataLoader(ds, batch_size=16, num_workers=0)
+
+        x, y = next(iter(loader))
         print(x.shape, y.shape)
         output = model(x)
         print(output.shape)
         assert output.shape == y.shape
-        break
-
-    config = Config(
-        name="dummy",
-        max_iterations=256,
-        lr=0.001,
-        batch_size=16,
-        num_workers=0,
-        evaluate=False,
-        wandb=False,
-        verbose=True,
-        compile=False,
-    )
-    trainer = Trainer(model, config)
-    _, cp_path = trainer.fit(ds)
-    new_trainer = Trainer.from_pretrained(trainer.model, config, cp_path, resume=False)
-    new_trainer.fit(ds)

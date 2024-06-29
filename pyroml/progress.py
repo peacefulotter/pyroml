@@ -26,7 +26,8 @@ class Progress:
             TextColumn("•"),
             TextColumn("{task.fields[metrics]}"),
         )
-        self.tasks: object[Stage, TaskID] = {}
+        self.tasks: dict[Stage, TaskID] = {}
+        self.metrics: dict[str, float] = {}
         self.current_task: TaskID = None
 
     def add_stage(
@@ -53,19 +54,28 @@ class Progress:
         if stage in self.tasks:
             self.current_task = self.tasks[stage]
 
-    def _unroll_metrics(self, metrics, name=None):
-        if isinstance(metrics, dict):
-            name = "" if name is None else name + "_"
-            metrics = [
-                self._unroll_metrics(v, name=f"{name}{k}") for k, v in metrics.items()
-            ]
-            return " ".join(metrics)
-        name = name or "loss"
-        return f"{name}={metrics:.3f}"
+    def _prefix(self, stage: Stage, name: str):
+        if stage == Stage.TRAIN:
+            return name
+        return f"{stage.to_prefix()}_{name}"
 
-    def advance(self, metrics={}):
+    def _register_metrics(self, stage: Stage, metrics: dict[str, float]):
+        for name, value in metrics.items():
+            name = self._prefix(stage, name)
+            self.metrics[name] = value
+
+    def _metrics_to_str(self):
+        str_metrics = ""
+        for name, value in self.metrics.items():
+            str_metrics += f"{name}={value:.3f} "
+        return str_metrics
+
+    def advance(self, stage: Stage, metrics: dict[str, float] = {}):
+        self._register_metrics(stage, metrics)
+        metrics_str = self._metrics_to_str()
+
         kwargs = {}
-        kwargs["metrics"] = self._unroll_metrics(metrics)
+        kwargs["metrics"] = metrics_str
         kwargs["advance"] = 1
         self.bar.update(self.current_task, **kwargs)
 

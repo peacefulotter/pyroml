@@ -2,7 +2,7 @@ from pyroml.config import *
 from pyroml.trainer import *
 from pyroml.model import *
 from pyroml.utils import *
-from pyroml.metrics import *
+from pyroml.tracker import *
 from pyroml.stats import *
 from pyroml.wandb import *
 

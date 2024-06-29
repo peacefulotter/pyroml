@@ -1,39 +1,47 @@
+import torch
+import torch.nn as nn
+
+from pathlib import Path
 from torch.optim import Adam
+from torch.optim.optimizer import Optimizer
+from torch.optim.lr_scheduler import LRScheduler as Scheduler
 
 
 class Config:
 
     def __init__(
         self,
-        name,
-        lr=1e-4,
-        max_epochs=-1,
-        max_iterations=None,
-        optimizer=Adam,
+        name: str,
+        loss: nn.Module = nn.MSELoss(),
+        lr: float = 1e-4,
+        max_epochs: int | None = -1,
+        max_iterations: int | None = None,
+        optimizer: Optimizer = Adam,
         optimizer_params=None,
-        scheduler=None,
+        scheduler: Scheduler | None = None,
         scheduler_params=None,
-        grad_norm_clip=1.0,
-        evaluate=True,
-        evaluate_every=10,
-        eval_max_iterations=None,
-        device="auto",
-        compile=True,
-        checkpoint_folder="./checkpoints",
-        batch_size=64,
-        eval_batch_size=None,
-        num_workers=4,
-        eval_num_workers=0,
-        wandb=True,
-        wandb_project=None,
-        verbose=False,
-        debug=False,
+        grad_norm_clip: float = 1.0,
+        evaluate: bool | str = True,
+        evaluate_every: int = 10,
+        eval_max_iterations: int | None = None,
+        device: str | torch.device = "auto",
+        compile: bool = True,
+        checkpoint_folder: str | Path = "./checkpoints",
+        batch_size: int = 64,
+        eval_batch_size: int = None,
+        num_workers: int = 4,
+        eval_num_workers: int = 0,
+        wandb: bool = True,
+        wandb_project: str | None = None,
+        verbose: bool = False,
+        debug: bool = False,
     ):
         """
         Configuration object with the specified hyperparameters.
 
         Args:
             name (str): Name of the configuration.
+            loss (torch.nn.Module): Loss function. Defaults to MSELoss.
             lr (float, optional): Learning rate. Defaults to 1e-4.
             max_epochs (int, optional): Number of epochs (if max_iterations is not defined). Defaults to 1.
             max_iterations (int): Maximum number of iterations. Defaults to None.
@@ -68,6 +76,7 @@ class Config:
 
         # Training
         self.lr = lr
+        self.loss = loss
         self.max_epochs = max_epochs
         self.max_iterations = max_iterations
         self.optimizer = optimizer
