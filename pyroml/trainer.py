@@ -1,25 +1,28 @@
-import os
 import torch
 import logging
-import torch.nn as nn
 
 from typing import Callable
-from torchmetrics import Metric
-from torch.utils.data import DataLoader, RandomSampler
+from contextlib import nullcontext
+from torch.utils.data import Dataset, DataLoader
 
-from pyroml.wandb import Wandb
+
 from pyroml.config import Config
-from pyroml.tracker import MetricsTracker
 from pyroml.progress import Progress
+from pyroml.wandb_logger import Wandb
+from pyroml.dispenser import Dispenser
 from pyroml.checkpoint import Checkpoint
-from pyroml.model import PyroModel, StepOutput, Step
-from pyroml.utils import to_device, get_date, Callback, CallbackHandler, Stage
+from pyroml.tracker import MetricsTracker
+from pyroml.model import PyroModel, StepOutput
+from pyroml.utils import Callback, CallbackHandler, Stage
 
 log = logging.getLogger(__name__)
 
 
-class Trainer(Checkpoint, CallbackHandler):
+class Trainer(CallbackHandler):
+    # TODO: merge config into trainer? in that case, model should be passed as parameter to all public methods
     def __init__(self, model: PyroModel, config: Config):
+        CallbackHandler.__init__(self)
+
         self.model = model
         self.config = config
 
@@ -29,76 +32,38 @@ class Trainer(Checkpoint, CallbackHandler):
             log.setLevel(logging.DEBUG)
 
         # Device selection, auto will default to cuda if available
-        self.device = torch.device("cpu")
-        if self.config.device == "auto":
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        log.info(f"Using device {self.device}")
+        device_type = config.device
+        if device_type == "auto":
+            device_type = "cuda" if torch.cuda.is_available() else "cpu"
+
+        # Context manager for mixed precision training - On cpu, only bfloat16 is supported
+        self.type_ctx = (
+            nullcontext()
+            if device_type == "cpu" and config.dtype != torch.bfloat16
+            else torch.autocast(device_type=device_type, dtype=config.dtype)
+        )
+        log.info(
+            f"Using device {self.type_ctx.device}, dtype {self.type_ctx.fast_dtype}"
+        )
 
         # Compile model if requested, improves performance
         if self.config.compile:
             self.compile_model()
 
-        # Training setup
-        self.epoch = 0
-        self.iteration = 0
-        self.optimizer = self.config.optimizer(
-            self.model.parameters(), lr=self.config.lr, **self.config.optimizer_params
-        )
-        self.scheduler = None
-        if self.config.scheduler:
-            self.scheduler = self.config.scheduler(
-                self.optimizer, **self.config.scheduler_params
-            )
-
         if config.wandb:
-            self.wandb = Wandb(config)
+            self.wandb = Wandb(self, config)
 
-        self.tracker = MetricsTracker()
+        self.tracker = MetricsTracker(self.model)
         self.progress: Progress = None
 
-        CallbackHandler.__init__(self)
-        Checkpoint.__init__(
-            self, self.config, self.model, self.optimizer, self.scheduler
-        )
-
-    def _is_model_compiled(self):
-        return isinstance(self.model, torch._dynamo.OptimizedModule)
-
     def compile_model(self):
-        if self._is_model_compiled():
+        if self.model._is_compiled():
             log.info("Model is already compiled, skipping compilation")
             return
 
         log.info(f"Compiling model...")
         self.model = torch.compile(self.model)
         log.info(f"Model compiled!")
-
-    def _get_batch(
-        self,
-        stage: Stage,
-        data_loader: DataLoader,
-        data_iter,
-        progress: Progress,
-        epoch: int,
-        max_epochs: int,
-    ):
-        try:
-            batch = next(data_iter)
-        except StopIteration:
-            self.trigger_callback(Callback.ON_EPOCH_END(stage))
-
-            if max_epochs > 0 and epoch + 1 >= max_epochs:
-                return None, None, None
-
-            progress.add_stage(stage, data_loader)
-
-            data_iter = iter(data_loader)
-            batch = next(data_iter)
-            epoch += 1
-
-        batch = to_device(batch, self.device)
-
-        return data_iter, batch, epoch
 
     def _extract_loss(self, output):
         if isinstance(output, dict):
@@ -110,102 +75,57 @@ class Trainer(Checkpoint, CallbackHandler):
                 "The return type of the model.step function should be a torch.Tensor, or dict[torch.Tensor]"
             )
 
-    def _fit_model(self, output: StepOutput):
-        """
-        - Backpropagate loss
-        - Clip the gradients if necessary
-        - Step the optimizer
-        - Step the scheduler if available
-        - Zero the gradients
-        """
-        pred = output[Step.PRED]
-        target = output[Step.TARGET]
-        loss = self.config.loss(pred, target)
-
-        loss.backward()
-        if self.config.grad_norm_clip != None and self.config.grad_norm_clip != 0.0:
-            nn.utils.clip_grad_norm_(
-                self.model.parameters(), self.config.grad_norm_clip
-            )
-        self.optimizer.step()
-        if self.scheduler:
-            self.scheduler.step()
-        self.optimizer.zero_grad(set_to_none=True)
-
     def _generic_loop(
         self,
         stage: Stage,
-        loader: DataLoader,
-        tracker: MetricsTracker,
+        dataset: Dataset,
         progress: Progress,
-        max_epochs: int,
-        iterating_cb: Callable[[int, int], bool],
         output_cb: Callable[[StepOutput], None] = None,
         task_name: str = None,
     ):
-        loader_iter = iter(loader)
+        self.trigger_callback(Callback.ON_START(stage))
 
-        self.progress.add_stage(stage, loader, task_name)
-        self.trigger_callback(Callback.ON_EPOCH_START(stage))
+        dispenser = Dispenser(self.config, dataset, stage)
 
-        epoch = 0
-        iterations = 0
-        while iterating_cb(iterations, epoch):
-            loader_iter, batch, epoch = self._get_batch(
-                stage=stage,
-                data_loader=loader,
-                data_iter=loader_iter,
-                progress=progress,
-                epoch=epoch,
-                max_epochs=max_epochs,
-            )
-            if batch is None:
-                break
+        progress.add_stage(stage, loader, task_name)
 
-            self.trigger_callback(
-                Callback.ON_ITER_START(stage), iterations=iterations, epoch=epoch
-            )
+        # TODO: Merge some callbacks, iterating_cb, and _get_batch. Make it return an iterator here
+        while iterating_cb(step, epoch):
 
-            output = self.model.step(batch, stage)
-            if output_cb:
-                output_cb(output)
+            self.trigger_callback(Callback.ON_ITER_START(stage), step=step, epoch=epoch)
+
+            with self.type_ctx:
+                output = self.model.step(batch, stage)
+                if output_cb:
+                    output_cb(output)
 
             # Compute batch and epoch metrics
-            metrics = tracker.update(
-                stage=stage, output=output, epoch=epoch, step=iterations
+            metrics = self.tracker.update(
+                stage=stage, output=output, epoch=epoch, step=step
             )
 
-            # Register metrics to wandb
-            if self.config.wandb:
-                self.wandb.log(stage=stage, metrics=metrics)
-
             # Advance the progress bar and log metrics
-            self.progress.advance(stage=stage, metrics=metrics)
+            progress.advance(stage=stage, metrics=metrics)
 
             self.trigger_callback(
                 Callback.ON_ITER_END(stage),
-                iterations=iterations,
+                step=step,
                 epoch=epoch,
                 metrics=metrics,
             )
 
-            iterations += 1
+            step += 1
+
+        self.trigger_callback(Callback.ON_END(stage))
 
     @torch.no_grad()
     def _validation_loop(self, ev_loader):
         self.model.eval()
 
-        iterating_cb = lambda i, _: i < len(ev_loader) or (
-            self.config.eval_max_iterations is not None
-            and i < self.config.eval_max_iterations
-        )
         self._generic_loop(
             stage=Stage.VAL,
             loader=ev_loader,
-            tracker=self.tracker,
             progress=self.progress,
-            max_epochs=1,
-            iterating_cb=iterating_cb,
         )
 
         self.progress.hide_stage(Stage.VAL)
@@ -213,102 +133,67 @@ class Trainer(Checkpoint, CallbackHandler):
 
         self.model.train()
 
-    def _training_loop(self, tr_loader, ev_loader):
+    def _training_loop(self, tr_dataset: Dataset, ev_dataset: Dataset):
+
+        # TODO: Move this to a dedicated class, handling batch iteration and iter / epoch callbacks
         def iterating_cb(i: int, e: int):
-            cont = self.config.max_iterations is None or i < self.config.max_iterations
+            cont = self.config.max_steps is None or i < self.config.max_steps
             if cont and self.config.evaluate and i % self.config.evaluate_every == 0:
-                self._validation_loop(ev_loader)
+                self._validation_loop(ev_dataset)
             return cont
 
-        def on_iter_start(_, **kwargs):
-            self.iteration = kwargs["iterations"]
-            self.epoch = kwargs["epoch"]
-
-        id = self.add_callback(Callback.ON_ITER_START(Stage.TRAIN), on_iter_start)
-
         self.model.train()
-        self.model.to(self.device)
+        self.model.to(self.type_ctx.device)
 
         self._generic_loop(
             stage=Stage.TRAIN,
-            loader=tr_loader,
-            tracker=self.tracker,
+            dataset=tr_dataset,
             progress=self.progress,
-            max_epochs=self.config.max_epochs,
-            iterating_cb=iterating_cb,
-            output_cb=self._fit_model,
+            output_cb=self.model._fit,
             task_name="[blue]Epoch {epoch}[/blue]",
         )
-
-        self.remove_callback(Callback.ON_ITER_START(Stage.TRAIN), id)
 
         self.model.cpu()
         self.model.eval()
 
-    def fit(self, tr_dataset, ev_dataset=None):
+    def fit(self, tr_dataset: Dataset, ev_dataset: Dataset = None):
         if self.config.evaluate and ev_dataset is None:
             log.warn(
                 "You have chosen to evaluate the model, but no evaluation dataset is passed. Ignoring evaluation."
             )
 
-        tr_loader = DataLoader(
-            tr_dataset,
-            sampler=RandomSampler(tr_dataset, replacement=True),
-            shuffle=False,
-            pin_memory=str(self.device) != "cpu",
-            batch_size=self.config.batch_size,
-            num_workers=self.config.num_workers,
-        )
-
-        ev_loader = (
-            DataLoader(
-                ev_dataset,
-                shuffle=False,
-                pin_memory=self.device != "cpu",
-                batch_size=self.config.eval_batch_size,
-                num_workers=self.config.eval_num_workers,
-            )
-            if ev_dataset is not None
-            else None
-        )
-
-        self.date = get_date()
-
-        if self.config.wandb:
-            self.wandb.init(self.model, self.optimizer, self.scheduler)
-
         self.progress = Progress()
         with self.progress.bar:
-            self._training_loop(tr_loader, ev_loader)
+            self._training_loop(tr_dataset, ev_dataset)
 
-        self.save_model()
+        return self.tracker
 
     def test(self, dataset):
         self.model.eval()
+        self.model.to(self.type_ctx.device)
 
         progress = Progress()
-        tracker = MetricsTracker()
-
-        te_loader = DataLoader(
-            dataset,
-            shuffle=False,
-            pin_memory=self.device != "cpu",
-            batch_size=self.config.eval_batch_size,
-            num_workers=self.config.eval_num_workers,
-        )
-
-        iterating_cb = lambda i, _: i < len(te_loader)
-
         with progress.bar:
             self._generic_loop(
                 stage=Stage.TEST,
-                loader=te_loader,
-                tracker=tracker,
+                dataset=dataset,
                 progress=progress,
-                max_epochs=1,
-                iterating_cb=iterating_cb,
             )
 
         self.model.cpu()
+        return self.tracker
 
-        return tracker
+    # @staticmethod
+    # def load(
+    #     folder: Path | str = None,
+    #     resume: bool = True,
+    #     strict: bool = True,
+    # ):
+    #     """
+    #     Loads a pretrained model from a specified checkpoint folder.
+
+    #     Args:
+    #         folder (str): The folder path where the pretrained model is saved.
+    #         resume (bool, optional): Whether to resume training from the checkpoint. Defaults to True.
+    #         strict (bool, optional): Whether to strictly enforce the shape and type of the loaded weights. Defaults to True.
+    #     """

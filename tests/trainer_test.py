@@ -1,21 +1,21 @@
 import sys
+import torch
 
 sys.path.append("..")
 
+from pyroml import Config, Trainer, Stage
 from dummy import DummyRegressionDataset, DummyRegressionModel
-from pyroml.config import Config
-from pyroml.trainer import Trainer
 
 if __name__ == "__main__":
     te_ds = DummyRegressionDataset(size=64)
     model = DummyRegressionModel()
 
     config = Config(
-        name="trainer_test",
+        dtype=torch.bfloat16,
         batch_size=4,
         wandb=False,
         num_workers=0,
     )
     trainer = Trainer(model, config)
     tracker = trainer.test(te_ds)
-    print(tracker.stats)
+    print(tracker.records[Stage.TEST])

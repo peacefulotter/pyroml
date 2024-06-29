@@ -13,7 +13,7 @@ from pyroml.model import PyroModel, Step
 from pyroml.utils import Stage
 
 
-class DummyClassification(PyroModel):
+class DummyClassificationModel(PyroModel):
     def __init__(self):
         super().__init__()
         self.seq = nn.Sequential(
@@ -88,7 +88,7 @@ class DummyClassificationDataset(Dataset):
 if __name__ == "__main__":
 
     for model, ds in [
-        (DummyClassification(), DummyClassificationDataset()),
+        (DummyClassificationModel(), DummyClassificationDataset()),
         (DummyRegressionModel(), DummyRegressionDataset()),
     ]:
 

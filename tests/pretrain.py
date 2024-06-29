@@ -17,8 +17,7 @@ if __name__ == "__main__":
     model = DummyRegressionModel(in_dim=in_dim)
     ds = DummyRegressionDataset(size=1024, in_dim=in_dim)
     config = Config(
-        name="pyro_main_test_v2",
-        max_iterations=256,
+        max_steps=256,
         batch_size=16,
         lr=0.05,
         wandb=False,

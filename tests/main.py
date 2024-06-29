@@ -32,9 +32,8 @@ if __name__ == "__main__":
     }
 
     config = Config(
-        name="main_test",
         lr=lr,
-        max_iterations=max_iterations,
+        max_steps=max_iterations,
         batch_size=16,
         grad_norm_clip=None,
         wandb_project="pyro_test",

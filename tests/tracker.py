@@ -8,14 +8,14 @@ from torch.utils.data import DataLoader
 from pyroml.utils import Stage, seed_everything
 from pyroml.tracker import MetricsTracker
 
-from dummy import DummyClassification, DummyClassificationDataset
+from dummy import DummyClassificationModel, DummyClassificationDataset
 
 
 if __name__ == "__main__":
     SEED = 42
     seed_everything(SEED)
 
-    model = DummyClassification()
+    model = DummyClassificationModel()
     dataset = DummyClassificationDataset()
     loader = iter(DataLoader(dataset, batch_size=16, shuffle=True))
     tracker = MetricsTracker(model)

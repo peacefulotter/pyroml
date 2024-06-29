@@ -8,8 +8,13 @@ import torch.nn as nn
 
 from enum import Enum
 from collections import defaultdict
+from torch.optim.lr_scheduler import LRScheduler as Scheduler
 
 log = logging.getLogger(__name__)
+
+
+def __classname(obj):
+    return obj.__class__.__name__
 
 
 def to_device(obj, device):
@@ -24,12 +29,6 @@ def to_device(obj, device):
     if isinstance(obj, list):
         return [to_device(v, device) for v in obj]
     return obj
-
-
-def get_lr(config, scheduler):
-    if scheduler == None:
-        return config.lr
-    return float(scheduler.get_last_lr()[0])
 
 
 def get_date():
@@ -78,11 +77,14 @@ def callback_factory(name: str):
     return wrapper
 
 
+# COMPLETELY REFACTOR CALLBACKS, DO LIKE LIGHTNING, its just better :/
 class Callback(Enum):
-    ON_ITER_START = callback_factory("iter_start")
-    ON_ITER_END = callback_factory("iter_end")
+    ON_START = callback_factory("start")
+    ON_END = callback_factory("end")
     ON_EPOCH_START = callback_factory("epoch_start")
     ON_EPOCH_END = callback_factory("epoch_end")
+    ON_ITER_START = callback_factory("iter_start")
+    ON_ITER_END = callback_factory("iter_end")
 
 
 class CallbackHandler:

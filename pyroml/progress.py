@@ -71,6 +71,8 @@ class Progress:
         return str_metrics
 
     def advance(self, stage: Stage, metrics: dict[str, float] = {}):
+        # TODO: log metrics to a txt file too ? do that here or dedicated file logger rather?
+
         self._register_metrics(stage, metrics)
         metrics_str = self._metrics_to_str()
 

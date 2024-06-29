@@ -15,6 +15,8 @@ import sys
 
 sys.path.append("..")
 
+from tests import WANDB_PROJECT
+
 from pyroml.config import Config
 from pyroml.trainer import Trainer
 from pyroml.utils import Stage, seed_everything
@@ -117,7 +119,6 @@ if __name__ == "__main__":
     model = IrisNet()
 
     config = Config(
-        name="iris",
         loss=nn.CrossEntropyLoss(),
         max_epochs=12,
         batch_size=16,
@@ -125,7 +126,7 @@ if __name__ == "__main__":
         evaluate=True,
         evaluate_every=2,
         wandb=True,
-        wandb_project="pyro_main_test",
+        wandb_project=WANDB_PROJECT,
         verbose=True,
         debug=True,
     )

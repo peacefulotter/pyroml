@@ -1,5 +1,6 @@
 import torch
 import logging
+import warnings
 import numpy as np
 import pandas as pd
 
@@ -52,9 +53,8 @@ class MetricsTracker:
         if Step.METRIC in output:
             out_metric = output[Step.METRIC]
         elif Step.METRIC not in output and Step.PRED in output:
-            log.warn(
-                f"No metric in output, using {Step.PRED} instead\nIf your model is used for classification, you likely want to use the {Step.METRIC} key."
-            )
+            msg = f"No metric in output, using {Step.PRED} instead\nIf your model is used for classification, you likely want to use the {Step.METRIC} key."
+            # TODO: log this only once, on my machine it logs multiple times warnings.warn(msg, stacklevel=2)
             out_metric = output[Step.PRED]
         else:
             msg = f"No {Step.METRIC} or {Step.PRED} key output, your model should at least return a tensor associated with the {Step.PRED} key"
@@ -71,7 +71,7 @@ class MetricsTracker:
         prefix_cb=None,
     ):
 
-        metrics = dict(epoch=epoch, step=step)
+        metrics = {}
         record = self.records[stage]
 
         for name, metric in self.metrics[stage].items():
@@ -83,7 +83,9 @@ class MetricsTracker:
 
             metrics[name] = metric_cb(metric).item()
 
-        record.loc[len(record)] = metrics
+        record_metrics = dict(epoch=epoch, step=step, **metrics)
+        record.loc[len(record)] = record_metrics
+
         return metrics
 
     def _register_batch_metrics(
@@ -95,6 +97,15 @@ class MetricsTracker:
             stage, epoch, step, metric_cb=lambda m: m(out_metric, out_target)
         )
 
+        # FIXME: Find a better way of integrating the loss into the metrics here (that will propagate to wandb and progress bar)
+        # What if we add the config.loss to the metrics dict in the tracker?
+        if "loss" in output:
+            batch_metrics["loss"] = output["loss"]
+            if "loss" not in self.records[stage].columns:
+                self.records[stage]["loss"] = np.nan
+            N = len(self.records[stage]) - 1
+            self.records[stage].loc[N, "loss"] = output["loss"]
+
         return batch_metrics
 
     def _register_epoch_metrics(self, stage: Stage, epoch: int, step: int):
@@ -104,26 +115,31 @@ class MetricsTracker:
 
         return epoch_metrics
 
-    # Maybe for later if we do trainer.predict() / trainer.test()
+    # NOTE: Maybe for later if we do trainer.predict() / trainer.test()
     # def compute(
     #     self, model: PyroModel, stage: Stage, output: StepOutput
     # ):
 
+    def get_epoch_metrics(self, stage: Stage):
+        records = self.records[stage]
+        records_epoch = records.loc[:, records.columns.str.contains("epoch")]
+        return records_epoch.to_dict(orient="records")
+
     def update(
         self, stage: Stage, output: StepOutput, epoch: int, step: int
-    ) -> dict[str, dict[str, float | np.ndarray]]:
+    ) -> dict[str, float]:
         if stage not in self.metrics:
             self._init_stage_metrics(stage)
 
         # Register batch metrics
-        batch_metrics = self._register_batch_metrics(stage, output, epoch, step)
+        metrics = self._register_batch_metrics(stage, output, epoch, step)
 
         # Register epoch metrics
         if epoch != self.records[stage].iloc[-1].epoch:
             epoch_metrics = self._register_epoch_metrics(stage, epoch, step)
-            batch_metrics.update(epoch_metrics)
+            metrics.update(epoch_metrics)
 
-        return batch_metrics
+        return metrics
 
     def plot(self, stage: Stage):
         # TODO: subplots + pass ax=ax to metric.plot()
