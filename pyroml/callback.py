@@ -4,6 +4,7 @@ import pyroml as p
 
 
 class OnChangeKwargs(TypedDict):
+    trainer: "p.Trainer"
     old_stage: "p.Stage"
     new_stage: "p.Stage"
 

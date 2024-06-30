@@ -7,7 +7,7 @@ from pyroml.status import Status
 from pyroml.config import Config
 from pyroml.model import PyroModel
 from pyroml.callback import Callback
-from pyroml.utils import Stage, __classname
+from pyroml.utils import Stage, get_classname
 
 
 class Wandb(Callback):
@@ -24,17 +24,18 @@ class Wandb(Callback):
     def on_train_start(self, **kwargs):
         self.start_time = -1
         self.cur_time = -1
-        self._init(self.model)
+        self._init()
 
     def on_train_iter_end(self, trainer: "p.Trainer"):
-        metrics = trainer.metrics_tracker.update()
-        self._log(status=trainer.status, **metrics)
+        metrics = trainer.metrics_tracker.get_batch_metrics()
+        self._log(status=trainer.status, metrics=metrics)
 
     def _on_end(self, trainer: "p.Trainer"):
         metrics = trainer.metrics_tracker.get_epoch_metrics()
-        self._log(status=trainer.status, **metrics)
+        print(metrics)
+        self._log(status=trainer.status, metrics=metrics)
 
-    def on_train_end(self, trainer: "p.Trainer", **kwargs):
+    def on_train_epoch_end(self, trainer: "p.Trainer", **kwargs):
         self._on_end(trainer)
 
     def on_validation_end(self, trainer: "p.Trainer", **kwargs):
@@ -42,11 +43,11 @@ class Wandb(Callback):
 
     def _get_attr_names(self):
         attr_names = dict(
-            model=__classname(self.model),
-            optim=__classname(self.model.optimizer),
+            model=get_classname(self.model),
+            optim=get_classname(self.model.optimizer),
         )
         if self.model.scheduler != None:
-            attr_names["sched"] = __classname(self.model.scheduler)
+            attr_names["sched"] = get_classname(self.model.scheduler)
         return attr_names
 
     def _init(self):

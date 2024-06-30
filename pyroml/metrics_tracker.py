@@ -25,6 +25,14 @@ class MetricsTracker:
         self.records: dict[Stage, pd.DataFrame] = {}
         self.metrics: dict[Stage, dict[str, Metric]] = {}
 
+    @property
+    def record(self):
+        return self.records[self.status.stage]
+
+    @property
+    def metric(self):
+        return self.metrics[self.status.stage]
+
     def _format_metrics(self, metrics: dict[Metric] | None):
         if metrics is None:
             return {}
@@ -72,10 +80,9 @@ class MetricsTracker:
     ):
 
         metrics = {}
-        stage = self.status.stage
-        record = self.records[stage]
+        record = self.record
 
-        for name, metric in self.metrics[stage].items():
+        for name, metric in self.metric.items():
             if prefix_cb is not None:
                 name = prefix_cb(name)
 
@@ -99,12 +106,12 @@ class MetricsTracker:
         # FIXME: Find a better way of integrating the loss into the metrics here (that will propagate to wandb and progress bar)
         # What if we add the config.loss to the metrics dict in the tracker?
         if "loss" in output:
-            stage = self.status.stage
+            record = self.record
             batch_metrics["loss"] = output["loss"]
-            if "loss" not in self.records[stage].columns:
-                self.records[stage]["loss"] = np.nan
-            N = len(self.records[stage]) - 1
-            self.records[stage].loc[N, "loss"] = output["loss"]
+            if "loss" not in record.columns:
+                record["loss"] = np.nan
+            N = len(record) - 1
+            record.loc[N, "loss"] = output["loss"]
 
         return batch_metrics
 
@@ -117,11 +124,15 @@ class MetricsTracker:
     #     self, model: PyroModel, stage: Stage, output: StepOutput
     # ):
 
+    def get_batch_metrics(self):
+        record = self.record
+        records_batch = record.loc[-1:, ~record.columns.str.contains("epoch")]
+        return records_batch.to_dict()
+
     def get_epoch_metrics(self):
-        stage = self.status.stage
-        records = self.records[stage]
-        records_epoch = records.loc[:, records.columns.str.contains("epoch")]
-        return records_epoch.to_dict(orient="records")
+        record = self.record
+        records_epoch = record.loc[-1:, record.columns.str.contains("epoch")]
+        return records_epoch.to_dict()
 
     def update(self, output: StepOutput) -> dict[str, float]:
         stage = self.status.stage
@@ -133,7 +144,7 @@ class MetricsTracker:
         metrics = self._register_batch_metrics(output)
 
         # Register epoch metrics
-        if self.status.epoch != self.records[stage].iloc[-1].epoch:
+        if self.status.epoch != self.record.iloc[-1].epoch:
             epoch_metrics = self._register_epoch_metrics()
             metrics.update(epoch_metrics)
 

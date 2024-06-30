@@ -21,7 +21,7 @@ class BatchIterator:
             dataset,
             sampler=sampler,
             shuffle=False,
-            pin_memory=str(trainer.type_ctx.device) != "cpu",
+            pin_memory=str(trainer.autocast.device) != "cpu",
             batch_size=batch_size,
             num_workers=num_workers,
         )

@@ -13,7 +13,7 @@ from torch.optim.lr_scheduler import LRScheduler as Scheduler
 log = logging.getLogger(__name__)
 
 
-def __classname(obj):
+def get_classname(obj):
     return obj.__class__.__name__
 
 

@@ -6,6 +6,7 @@ from contextlib import nullcontext
 from torch.utils.data import Dataset
 
 
+from pyroml.autocast import Autocast
 from pyroml.callback import Callback
 from pyroml.status import Status
 from pyroml.utils import Stage
@@ -31,34 +32,26 @@ class Trainer:
         if self.config.debug:
             log.setLevel(logging.DEBUG)
 
-        # Device selection, auto will default to cuda if available
-        device_type = config.device
-        if device_type == "auto":
-            device_type = "cuda" if torch.cuda.is_available() else "cpu"
-
-        # Context manager for mixed precision training - On cpu, only bfloat16 is supported
-        self.type_ctx = (
-            nullcontext()
-            if device_type == "cpu" and config.dtype != torch.bfloat16
-            else torch.autocast(device_type=device_type, dtype=config.dtype)
-        )
-        log.info(
-            f"Using device {self.type_ctx.device}, dtype {self.type_ctx.fast_dtype}"
-        )
+        # Context manager for mixed precision training and moving to device - On cpu, only bfloat16 is supported
+        self.autocast = Autocast(config)
 
         # Compile model if requested, improves performance
         if self.config.compile:
             self.compile_model()
+
+        self.model.__setattr__("_trainer", self)
+        print(self.model._trainer)
 
         self.status = Status(self)
         self.metrics_tracker = MetricsTracker(self.model, self.status)
 
         self.callbacks = config.callbacks
         self.callbacks.append(self.model)
+        self.callbacks.append(self.autocast)
 
         if config.wandb:
-            self.wandb = Wandb(self, config)
-            self.callbacks.append(self.wandb)
+            wandb = Wandb(model=self.model, config=config)
+            self.callbacks.append(wandb)
 
         self.temp_callbacks: list[Callback] = []
 
@@ -109,7 +102,6 @@ class Trainer:
         after_forward_cb: Callable[[StepOutput], None] = None,
         task_name: str = None,
     ):
-        self.model.to(self.type_ctx.device)
         self.temp_callbacks = [progress]
         old_stage = self.status.stage
         self.status.stage = stage
@@ -117,9 +109,9 @@ class Trainer:
 
         def iterate(batch):
             # Forward pass
-            with self.type_ctx:
+            with self.autocast:
                 if before_forward_cb:
-                    before_forward_cb(batch)
+                    before_forward_cb()
 
                 output = self.model.step(batch, stage)
 
@@ -145,7 +137,6 @@ class Trainer:
         self._trigger_callback("end")
         self.status.stage = old_stage
         self.temp_callbacks = []
-        self.model.cpu()
 
     @torch.no_grad()
     def _validation_loop(self, dataset):
@@ -158,11 +149,16 @@ class Trainer:
     # TODO: Move this to a dedicated Loop(Callback) class
     # such that we can remove the before_forward_cb and after_forward_cb
     def _training_loop(self, tr_dataset: Dataset, ev_dataset: Dataset):
-        def before_forward_cb(i: int, e: int):
-            cont = self.config.max_steps is None or i < self.config.max_steps
-            if cont and self.config.evaluate and i % self.config.evaluate_every == 0:
+
+        print(self.model._trainer)
+        self.model.configure_optimizers()
+
+        def before_forward_cb():
+            if (
+                self.config.evaluate
+                and self.status.step % self.config.evaluate_every == 0
+            ):
                 self._validation_loop(ev_dataset)
-            return cont
 
         self._generic_loop(
             stage=Stage.TRAIN,
@@ -179,7 +175,7 @@ class Trainer:
                 "You have chosen to evaluate the model, but no evaluation dataset is passed. Ignoring evaluation."
             )
 
-        self.progress = ProgressBar()
+        self.progress = ProgressBar(self.status)
         with self.progress.bar:
             self._training_loop(tr_dataset, ev_dataset)
 
@@ -187,7 +183,6 @@ class Trainer:
 
     def test(self, dataset):
         progress = ProgressBar(self.status)
-
         with progress.bar:
             self._generic_loop(
                 stage=Stage.TEST,

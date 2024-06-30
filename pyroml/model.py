@@ -10,10 +10,11 @@ from torchmetrics import Metric
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler as Scheduler
 
+import pyroml as p
 from pyroml.config import Config
 from pyroml.callback import Callback
 from pyroml.checkpoint import Checkpoint
-from pyroml.utils import Stage, __classname
+from pyroml.utils import Stage, get_classname
 
 log = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ class MissingStepMethodException(Exception):
 class PyroModel(Callback, nn.Module):
     def __init__(self):
         super().__init__()
-        self.config: Config
+        self._trainer: "p.Trainer" = None
         self.optimizer: Optimizer
         self.scheduler: Scheduler | None
 
@@ -52,8 +53,9 @@ class PyroModel(Callback, nn.Module):
     ) -> dict[Metric] | None:
         pass
 
-    def configure_optimizers(self, config: Config):
-        self.config = config
+    def configure_optimizers(self):
+        print(self._trainer)
+        config = self._trainer.config
 
         self.optimizer: Optimizer = config.optimizer(
             self.parameters(), lr=config.lr, **config.optimizer_params
@@ -101,7 +103,7 @@ class PyroModel(Callback, nn.Module):
 
     def get_current_lr(self):
         if self.scheduler == None:
-            return self.config.lr
+            return self.trainer.config.lr
         return float(self.scheduler.get_last_lr()[0])
 
     # TODO !!!: even possible to return true in nn.Module?
@@ -135,11 +137,11 @@ class PyroModel(Callback, nn.Module):
     def _get_model_state(self):
         state = {
             "compiled": self._is_compiled(),
-            "optimizer_name": __classname(self.optimizer),
+            "optimizer_name": get_classname(self.optimizer),
             "optimizer": self.optimizer.state_dict(),
         }
         if hasattr(self, "scheduler"):
-            state["scheduler_name"] = __classname(self.scheduler)
+            state["scheduler_name"] = get_classname(self.scheduler)
             state["scheduler"] = self.scheduler.state_dict()
 
         return state
