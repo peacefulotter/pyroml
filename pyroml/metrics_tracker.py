@@ -55,21 +55,21 @@ class MetricsTracker:
         return x
 
     def _extract_output(self, output: StepOutput):
-        if Step.TARGET not in output:
-            msg = f"No target in output, your model should return a target tensor associated to the {Step.TARGET} key"
-            raise MissingStepKeyException(msg)
-        out_target = output[Step.TARGET]
+        def __check(key: Step, metric_key: Step):
+            out = None
+            if metric_key in output:
+                out = output[metric_key]
+            elif metric_key not in output and key in output:
+                msg = f"No metric in output, using {key} instead\nIf your model is used for classification, you likely want to output a {metric_key} key as well."
+                # TODO: log this only once, on my machine it logs multiple times warnings.warn(msg, stacklevel=2)
+                out = output[key]
+            else:
+                msg = f"No {metric_key} or {key} key in model.step output, your model should at least return a tensor associated with the {key} or {metric_key} key"
+                raise MissingStepKeyException(msg)
+            return out
 
-        out_metric = None
-        if Step.METRIC in output:
-            out_metric = output[Step.METRIC]
-        elif Step.METRIC not in output and Step.PRED in output:
-            msg = f"No metric in output, using {Step.PRED} instead\nIf your model is used for classification, you likely want to use the {Step.METRIC} key."
-            # TODO: log this only once, on my machine it logs multiple times warnings.warn(msg, stacklevel=2)
-            out_metric = output[Step.PRED]
-        else:
-            msg = f"No {Step.METRIC} or {Step.PRED} key output, your model should at least return a tensor associated with the {Step.PRED} key"
-            raise MissingStepKeyException(msg)
+        out_metric = __check(Step.PRED, Step.METRIC_PRED)
+        out_target = __check(Step.TARGET, Step.METRIC_TARGET)
 
         return out_metric, out_target
 
@@ -127,12 +127,12 @@ class MetricsTracker:
     def get_batch_metrics(self):
         record = self.record
         records_batch = record.loc[-1:, ~record.columns.str.contains("epoch")]
-        return records_batch.to_dict()
+        return records_batch.to_dict(orient="list")
 
     def get_epoch_metrics(self):
         record = self.record
         records_epoch = record.loc[-1:, record.columns.str.contains("epoch")]
-        return records_epoch.to_dict()
+        return records_epoch.to_dict(orient="list")
 
     def update(self, output: StepOutput) -> dict[str, float]:
         stage = self.status.stage

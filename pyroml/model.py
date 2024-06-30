@@ -21,8 +21,9 @@ log = logging.getLogger(__name__)
 
 class Step(Enum):
     PRED = "pred"
-    METRIC = "metric"
     TARGET = "target"
+    METRIC_PRED = "metric_pred"
+    METRIC_TARGET = "metric_target"
 
 
 StepData: TypeAlias = torch.Tensor | dict[torch.Tensor] | tuple[torch.Tensor]
@@ -53,9 +54,15 @@ class PyroModel(Callback, nn.Module):
     ) -> dict[Metric] | None:
         pass
 
-    def configure_optimizers(self):
-        print(self._trainer)
-        config = self._trainer.config
+    @property
+    def config(self) -> Config:
+        return self._trainer.config
+
+    def _setup(self, trainer: "p.Trainer"):
+        self._trainer = trainer
+
+    def _configure_optimizers(self):
+        config = self.config
 
         self.optimizer: Optimizer = config.optimizer(
             self.parameters(), lr=config.lr, **config.optimizer_params
@@ -103,7 +110,7 @@ class PyroModel(Callback, nn.Module):
 
     def get_current_lr(self):
         if self.scheduler == None:
-            return self.trainer.config.lr
+            return self.config.lr
         return float(self.scheduler.get_last_lr()[0])
 
     # TODO !!!: even possible to return true in nn.Module?
@@ -115,26 +122,10 @@ class PyroModel(Callback, nn.Module):
         log.info(f"Saving model to {folder}")
 
         # Saving model weights
-        st.save_model(self.model, folder / Checkpoint.MODEL_WEIGHTS)
+        st.save_model(self, folder / Checkpoint.MODEL_WEIGHTS)
 
         # Saving state
         # TODO: move this to trainer state file
-        state = self._get_model_state()
-        torch.save(state, folder / Checkpoint.MODEL_STATE)
-
-        # Saving model hyperparameters
-        # TODO: find a way to store and load hparams
-        # with open(folder / Checkpoint.MODEL_HPARAMS, "w") as f:
-        #    json.dump(self.model.hparams, f, cls=EncodeTensor)
-
-    def _load_state(self, state):
-        self.epoch = state["epoch"]
-        self.iteration = state["iteration"]
-        self.optimizer.load_state_dict(state["optimizer"])
-        if hasattr(self, "scheduler") and "scheduler" in state:
-            self.scheduler.load_state_dict(state["scheduler"])
-
-    def _get_model_state(self):
         state = {
             "compiled": self._is_compiled(),
             "optimizer_name": get_classname(self.optimizer),
@@ -144,7 +135,12 @@ class PyroModel(Callback, nn.Module):
             state["scheduler_name"] = get_classname(self.scheduler)
             state["scheduler"] = self.scheduler.state_dict()
 
-        return state
+        torch.save(state, folder / Checkpoint.MODEL_STATE)
+
+        # Saving model hyperparameters
+        # TODO: find a way to store and load hparams
+        # with open(folder / Checkpoint.MODEL_HPARAMS, "w") as f:
+        #    json.dump(self.model.hparams, f, cls=EncodeTensor)
 
     def from_pretrained(self, folder: Path = None, strict: bool = True):
         """
@@ -157,8 +153,12 @@ class PyroModel(Callback, nn.Module):
         log.info(f"Loading checkpoint from {folder}")
 
         # Load training state
+        # TODO: move this to trainer state file
         state = torch.load(folder / Checkpoint.MODEL_STATE, map_location="cpu")
-        self._load_state(state)
+
+        self.optimizer.load_state_dict(state["optimizer"])
+        if hasattr(self, "scheduler") and "scheduler" in state:
+            self.scheduler.load_state_dict(state["scheduler"])
 
         # Load model weights
         # Must be done after creating the trainer if the model has been saved compiled

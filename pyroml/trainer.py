@@ -39,18 +39,17 @@ class Trainer:
         if self.config.compile:
             self.compile_model()
 
-        self.model.__setattr__("_trainer", self)
-        print(self.model._trainer)
+        self.model._setup(self)
 
         self.status = Status(self)
-        self.metrics_tracker = MetricsTracker(self.model, self.status)
+        self.metrics_tracker = MetricsTracker(model=self.model, status=self.status)
 
         self.callbacks = config.callbacks
         self.callbacks.append(self.model)
         self.callbacks.append(self.autocast)
 
         if config.wandb:
-            wandb = Wandb(model=self.model, config=config)
+            wandb = Wandb(model=self.model, config=self.config, status=self.status)
             self.callbacks.append(wandb)
 
         self.temp_callbacks: list[Callback] = []
@@ -150,8 +149,7 @@ class Trainer:
     # such that we can remove the before_forward_cb and after_forward_cb
     def _training_loop(self, tr_dataset: Dataset, ev_dataset: Dataset):
 
-        print(self.model._trainer)
-        self.model.configure_optimizers()
+        self.model._configure_optimizers()
 
         def before_forward_cb():
             if (

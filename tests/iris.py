@@ -49,12 +49,14 @@ class IrisNet(PyroModel):
         x, y = data
         preds = self(x)
 
-        # y = y.argmax(dim=1)
-        # preds = preds.argmax(dim=1)
+        metric_preds = preds.argmax(dim=1)
+        metric_target = y.argmax(dim=1)
 
         return {
             Step.PRED: preds,
             Step.TARGET: y,
+            Step.METRIC_PRED: metric_preds,
+            Step.METRIC_TARGET: metric_target,
         }
 
 
@@ -118,11 +120,25 @@ if __name__ == "__main__":
 
     model = IrisNet()
 
+    max_epochs = 16
+    batch_size = 16
+
     config = Config(
         loss=nn.CrossEntropyLoss(),
-        max_epochs=12,
-        batch_size=16,
-        lr=0.01,
+        optimizer=torch.optim.AdamW,
+        scheduler=torch.optim.lr_scheduler.OneCycleLR,
+        scheduler_params={
+            "max_lr": 0.005,
+            "steps_per_epoch": (len(tr_ds) // batch_size) + 1,
+            "epochs": max_epochs,
+            "anneal_strategy": "cos",
+            "cycle_momentum": False,
+            "div_factor": 1e2,
+            "final_div_factor": 0.05,
+        },
+        max_epochs=max_epochs,
+        batch_size=batch_size,
+        lr=0.002,
         evaluate=True,
         evaluate_every=2,
         wandb=True,
@@ -134,7 +150,7 @@ if __name__ == "__main__":
     trainer = Trainer(model, config)
     trainer.fit(tr_ds, ev_ds)
 
-    print(trainer.metrics_tracker.stats)
+    print(trainer.metrics_tracker.record)
 
     te_tracker = trainer.test(te_ds)
-    print(te_tracker.stats)
+    print(te_tracker.records[Stage.TEST])

@@ -11,12 +11,14 @@ from pyroml.utils import Stage, get_classname
 
 
 class Wandb(Callback):
-    def __init__(self, model: PyroModel, config: Config):
+    def __init__(self, model: PyroModel, config: Config, status: Status):
+        # TODO: merge wandb and wandb_project into single config.wandb
         assert (
             config.wandb_project != None
         ), "When config.wandb is set, you need to specify a project name too (config.wandb_project='my_project_name')"
         self.model = model
         self.config = config
+        self.status = status
 
         self.start_time = None
         self.cur_time = -1
@@ -26,20 +28,20 @@ class Wandb(Callback):
         self.cur_time = -1
         self._init()
 
-    def on_train_iter_end(self, trainer: "p.Trainer"):
-        metrics = trainer.metrics_tracker.get_batch_metrics()
-        self._log(status=trainer.status, metrics=metrics)
+    def on_train_iter_end(self, **kwargs):
+        metrics = kwargs["metrics"]
+        self._log(metrics=metrics)
 
-    def _on_end(self, trainer: "p.Trainer"):
+    def _on_end(self, **kwargs):
+        trainer: "p.Trainer" = kwargs.get("trainer")
         metrics = trainer.metrics_tracker.get_epoch_metrics()
-        print(metrics)
-        self._log(status=trainer.status, metrics=metrics)
+        self._log(metrics=metrics)
 
-    def on_train_epoch_end(self, trainer: "p.Trainer", **kwargs):
-        self._on_end(trainer)
+    def on_train_epoch_end(self, **kwargs):
+        self._on_end(**kwargs)
 
-    def on_validation_end(self, trainer: "p.Trainer", **kwargs):
-        self._on_end(trainer)
+    def on_validation_end(self, **kwargs):
+        self._on_end(**kwargs)
 
     def _get_attr_names(self):
         attr_names = dict(
@@ -69,7 +71,9 @@ class Wandb(Callback):
         wandb.define_metric("time")
         # NOTE: what was this doing: wandb.define_metric("eval", step_metric="iter")
 
-    def _log(self, status: Status, metrics: dict[str, float]):
+    def _log(self, metrics: dict[str, float]):
+        status = self.status
+
         if self.start_time == -1:
             self.start_time = time.time()
 

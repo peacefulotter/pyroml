@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from pyroml.utils import Stage, seed_everything
-from pyroml.tracker import MetricsTracker
+from pyroml.metrics_tracker import MetricsTracker
 
 from dummy import DummyClassificationModel, DummyClassificationDataset
 
