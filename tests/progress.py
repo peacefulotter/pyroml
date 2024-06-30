@@ -4,13 +4,13 @@ sys.path.append("..")
 
 import time
 import random
-from pyroml import Stage, Progress
+from pyroml import Stage, ProgressBar
 
 if __name__ == "__main__":
     epochs = 3
     iters = 10
 
-    p = Progress()
+    p = ProgressBar()
 
     metrics = {
         "loss": random.random(),

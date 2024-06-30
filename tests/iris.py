@@ -134,7 +134,7 @@ if __name__ == "__main__":
     trainer = Trainer(model, config)
     trainer.fit(tr_ds, ev_ds)
 
-    print(trainer.tracker.stats)
+    print(trainer.metrics_tracker.stats)
 
     te_tracker = trainer.test(te_ds)
     print(te_tracker.stats)

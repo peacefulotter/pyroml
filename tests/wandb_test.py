@@ -28,4 +28,4 @@ if __name__ == "__main__":
     )
     trainer = p.Trainer(model, config)
     trainer.fit(tr_ds, ev_ds)
-    print(trainer.tracker.records[p.Stage.TRAIN])
+    print(trainer.metrics_tracker.records[p.Stage.TRAIN])

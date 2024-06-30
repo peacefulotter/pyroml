@@ -11,6 +11,7 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler as Scheduler
 
 from pyroml.config import Config
+from pyroml.callback import Callback
 from pyroml.checkpoint import Checkpoint
 from pyroml.utils import Stage, __classname
 
@@ -31,7 +32,7 @@ class MissingStepMethodException(Exception):
     pass
 
 
-class PyroModel(nn.Module):
+class PyroModel(Callback, nn.Module):
     def __init__(self):
         super().__init__()
         self.config: Config

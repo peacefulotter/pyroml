@@ -52,7 +52,7 @@ def unwrap_model(model: nn.Module) -> nn.Module:
 
 class Stage(Enum):
     TRAIN = "train"
-    VAL = "val"
+    VAL = "validation"
     TEST = "test"
 
     def to_progress(self):
@@ -68,42 +68,6 @@ class Stage(Enum):
             Stage.VAL: "ev",
             Stage.TEST: "te",
         }[self]
-
-
-def callback_factory(name: str):
-    def wrapper(stage: Stage):
-        return f"on_{stage.value}_{name}"
-
-    return wrapper
-
-
-# COMPLETELY REFACTOR CALLBACKS, DO LIKE LIGHTNING, its just better :/
-class Callback(Enum):
-    ON_START = callback_factory("start")
-    ON_END = callback_factory("end")
-    ON_EPOCH_START = callback_factory("epoch_start")
-    ON_EPOCH_END = callback_factory("epoch_end")
-    ON_ITER_START = callback_factory("iter_start")
-    ON_ITER_END = callback_factory("iter_end")
-
-
-class CallbackHandler:
-    def __init__(self):
-        self.callbacks = defaultdict(list)
-
-    def add_callback(self, onevent: str, callback):
-        self.callbacks[onevent].append(callback)
-        return len(self.callbacks[onevent]) - 1
-
-    def set_callback(self, onevent: str, callback):
-        self.callbacks[onevent] = [callback]
-
-    def trigger_callback(self, onevent: str, **kwargs):
-        for callback in self.callbacks.get(onevent, []):
-            callback(self, **kwargs)
-
-    def remove_callback(self, onevent: str, index):
-        del self.callbacks[onevent][index]
 
 
 def seed_everything(seed):

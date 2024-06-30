@@ -7,6 +7,7 @@ import pandas as pd
 from torchmetrics import Metric
 
 from pyroml.utils import Stage
+from pyroml.status import Status
 from pyroml.model import PyroModel, StepOutput, Step
 
 log = logging.getLogger(__name__)
@@ -17,8 +18,9 @@ class MissingStepKeyException(Exception):
 
 
 class MetricsTracker:
-    def __init__(self, model: PyroModel):
+    def __init__(self, model: PyroModel, status: Status):
         self.model = model
+        self.status = status
 
         self.records: dict[Stage, pd.DataFrame] = {}
         self.metrics: dict[Stage, dict[str, Metric]] = {}
@@ -32,7 +34,8 @@ class MetricsTracker:
             "The return type of the model.configure_metrics function should be a dict[torchmetrics.Metric], or None"
         )
 
-    def _init_stage_metrics(self, stage: Stage):
+    def _init_stage_metrics(self):
+        stage = self.status.stage
         metrics = self.model.configure_metrics()
         metrics = self._format_metrics(metrics)
         self.metrics[stage] = metrics
@@ -64,14 +67,12 @@ class MetricsTracker:
 
     def _register_metrics(
         self,
-        stage: Stage,
-        epoch: int,
-        step: int,
         metric_cb,
         prefix_cb=None,
     ):
 
         metrics = {}
+        stage = self.status.stage
         record = self.records[stage]
 
         for name, metric in self.metrics[stage].items():
@@ -83,23 +84,22 @@ class MetricsTracker:
 
             metrics[name] = metric_cb(metric).item()
 
-        record_metrics = dict(epoch=epoch, step=step, **metrics)
+        record_metrics = dict(**self.status.to_dict(), **metrics)
         record.loc[len(record)] = record_metrics
 
         return metrics
 
-    def _register_batch_metrics(
-        self, stage: Stage, output: StepOutput, epoch: int, step: int
-    ):
+    def _register_batch_metrics(self, output: StepOutput):
         out_metric, out_target = self._extract_output(output)
 
         batch_metrics = self._register_metrics(
-            stage, epoch, step, metric_cb=lambda m: m(out_metric, out_target)
+            metric_cb=lambda m: m(out_metric, out_target)
         )
 
         # FIXME: Find a better way of integrating the loss into the metrics here (that will propagate to wandb and progress bar)
         # What if we add the config.loss to the metrics dict in the tracker?
         if "loss" in output:
+            stage = self.status.stage
             batch_metrics["loss"] = output["loss"]
             if "loss" not in self.records[stage].columns:
                 self.records[stage]["loss"] = np.nan
@@ -108,11 +108,8 @@ class MetricsTracker:
 
         return batch_metrics
 
-    def _register_epoch_metrics(self, stage: Stage, epoch: int, step: int):
-        epoch_metrics = self._register_metrics(
-            stage, epoch, step, metric_cb=lambda m: m.compute()
-        )
-
+    def _register_epoch_metrics(self):
+        epoch_metrics = self._register_metrics(metric_cb=lambda m: m.compute())
         return epoch_metrics
 
     # NOTE: Maybe for later if we do trainer.predict() / trainer.test()
@@ -120,28 +117,30 @@ class MetricsTracker:
     #     self, model: PyroModel, stage: Stage, output: StepOutput
     # ):
 
-    def get_epoch_metrics(self, stage: Stage):
+    def get_epoch_metrics(self):
+        stage = self.status.stage
         records = self.records[stage]
         records_epoch = records.loc[:, records.columns.str.contains("epoch")]
         return records_epoch.to_dict(orient="records")
 
-    def update(
-        self, stage: Stage, output: StepOutput, epoch: int, step: int
-    ) -> dict[str, float]:
+    def update(self, output: StepOutput) -> dict[str, float]:
+        stage = self.status.stage
+
         if stage not in self.metrics:
-            self._init_stage_metrics(stage)
+            self._init_stage_metrics()
 
         # Register batch metrics
-        metrics = self._register_batch_metrics(stage, output, epoch, step)
+        metrics = self._register_batch_metrics(output)
 
         # Register epoch metrics
-        if epoch != self.records[stage].iloc[-1].epoch:
-            epoch_metrics = self._register_epoch_metrics(stage, epoch, step)
+        if self.status.epoch != self.records[stage].iloc[-1].epoch:
+            epoch_metrics = self._register_epoch_metrics()
             metrics.update(epoch_metrics)
 
         return metrics
 
-    def plot(self, stage: Stage):
+    def plot(self, stage: Stage = None):
+        stage = stage or self.status.stage
         # TODO: subplots + pass ax=ax to metric.plot()
         for _, metric in self.metrics[stage].items():
             metric.plot()

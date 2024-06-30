@@ -1,15 +1,16 @@
 import time
 import wandb
-import logging
 
+import pyroml as p
+
+from pyroml.status import Status
 from pyroml.config import Config
 from pyroml.model import PyroModel
-from pyroml.utils import Stage, Callback, __classname
+from pyroml.callback import Callback
+from pyroml.utils import Stage, __classname
 
-log = logging.getLogger(__name__)
 
-
-class Wandb:
+class Wandb(Callback):
     def __init__(self, model: PyroModel, config: Config):
         assert (
             config.wandb_project != None
@@ -20,30 +21,24 @@ class Wandb:
         self.start_time = None
         self.cur_time = -1
 
-        self.trainer.add_callback(Callback.ON_START(Stage.TRAIN), self.on_train_start)
-        self.trainer.add_callback(
-            Callback.ON_ITER_END(Stage.TRAIN), self.on_train_iter_end
-        )
-        self.trainer.add_callback(Callback.ON_END(Stage.TRAIN), self.on_train_end)
-        self.trainer.add_callback(Callback.ON_END(Stage.VAL), self.on_validation_end)
-
     def on_train_start(self, **kwargs):
         self.start_time = -1
         self.cur_time = -1
+        self._init(self.model)
 
-        self.init(self.model)
+    def on_train_iter_end(self, trainer: "p.Trainer"):
+        metrics = trainer.metrics_tracker.update()
+        self._log(status=trainer.status, **metrics)
 
-    def on_train_iter_end(self, **kwargs):
-        metrics = self.trainer.tracker.update(Stage.TRAIN)
-        self.log(stage=Stage.TRAIN, **metrics)
+    def _on_end(self, trainer: "p.Trainer"):
+        metrics = trainer.metrics_tracker.get_epoch_metrics()
+        self._log(status=trainer.status, **metrics)
 
-    def on_train_end(self):
-        metrics = self.trainer.tracker.get_epoch_metrics(Stage.TRAIN)
-        self.log(stage=Stage.TRAIN, **metrics)
+    def on_train_end(self, trainer: "p.Trainer", **kwargs):
+        self._on_end(trainer)
 
-    def on_validation_end(self):
-        metrics = self.trainer.tracker.get_epoch_metrics(Stage.VAL)
-        self.log(stage=Stage.VAL, **metrics)
+    def on_validation_end(self, trainer: "p.Trainer", **kwargs):
+        self._on_end(trainer)
 
     def _get_attr_names(self):
         attr_names = dict(
@@ -54,7 +49,7 @@ class Wandb:
             attr_names["sched"] = __classname(self.model.scheduler)
         return attr_names
 
-    def init(self):
+    def _init(self):
         run_name = self.get_run_name()
 
         # FIXME: make sure self.config is not modified by the .update()
@@ -63,31 +58,28 @@ class Wandb:
         attr_names = self._get_attr_names()
         wandb_config.update(attr_names)
 
-        log.info(
-            f"Setting project_name {self.config.wandb_project} and run name {run_name}"
-        )
-
         wandb.init(
             project=self.config.wandb_project,
             name=run_name,
             config=wandb_config,
         )
-        # NOTE: following is necessary?
-        wandb.define_metric("iter")
+        wandb.define_metric("epoch")
+        wandb.define_metric("step")
         wandb.define_metric("time")
         # NOTE: what was this doing: wandb.define_metric("eval", step_metric="iter")
 
-    def log(self, stage: Stage, metrics: dict[str, float], epoch: int, step: int):
+    def _log(self, status: Status, metrics: dict[str, float]):
         if self.start_time == -1:
             self.start_time = time.time()
 
         old_time = self.cur_time
         self.cur_time = time.time()
 
-        payload = {f"{stage.value}/{k}": v for k, v in metrics.items()}
-        if stage == Stage.TRAIN:
-            payload["epoch"] = epoch
-            payload["step"] = step
+        payload = {f"{status.stage.value}/{k}": v for k, v in metrics.items()}
+
+        if status.stage == Stage.TRAIN:
+            payload.update(status.to_dict())
+
         payload["lr"] = self.model.get_current_lr()
         payload["time"] = time.time() - self.start_time
         payload["dt_time"] = self.cur_time - old_time

@@ -7,6 +7,9 @@ from torch.optim.optimizer import Optimizer
 from torch.optim.lr_scheduler import LRScheduler as Scheduler
 
 
+import pyroml as p
+
+
 class Config:
 
     def __init__(
@@ -35,6 +38,7 @@ class Config:
         wandb_project: str | None = None,
         verbose: bool = False,
         debug: bool = False,
+        callbacks: list["p.Callback"] = [],
     ):
         """
         Configuration object with the specified hyperparameters.
@@ -64,6 +68,7 @@ class Config:
             wandb_project (str, optional): Wandb project name, if wandb is set to True. Defaults to None.
             verbose (bool, optional): Whether to print details of whats going on in the system. Defaults to False.
             debug: (bool, optional): Whether to print debug information. Defaults to False.
+            callbacks (list[Callback], optional): List of callbacks to use. Defaults to [].
         Returns:
             Config: Configuration object with the specified hyperparameters.
         """
@@ -105,6 +110,9 @@ class Config:
         self.wandb_project = wandb_project
         self.verbose = verbose
         self.debug = debug
+
+        # Callbacks
+        self.callbacks = callbacks
 
     def __str__(self):
         return f"Config({str(self.__dict__)[1:-1]})"

@@ -1,4 +1,3 @@
-from torch.utils.data import DataLoader
 from rich.progress import (
     TaskID,
     BarColumn,
@@ -6,16 +5,20 @@ from rich.progress import (
     TimeElapsedColumn,
     MofNCompleteColumn,
     TimeRemainingColumn,
-    Progress as ProgressBar,
+    Progress,
 )
 
 
 from pyroml.utils import Stage
+from pyroml.status import Status
+from pyroml.callback import Callback
 
 
-class Progress:
-    def __init__(self):
-        self.bar = ProgressBar(
+class ProgressBar(Callback):
+    def __init__(self, status: Status):
+        self.status = status
+
+        self.bar = Progress(
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             MofNCompleteColumn(),
@@ -26,42 +29,49 @@ class Progress:
             TextColumn("•"),
             TextColumn("{task.fields[metrics]}"),
         )
+
         self.tasks: dict[Stage, TaskID] = {}
         self.metrics: dict[str, float] = {}
-        self.current_task: TaskID = None
+
+    @property
+    def _current_task(self) -> TaskID:
+        if self.status.stage not in self.tasks:
+            raise ValueError("No task found for the current stage")
+        return self.tasks[self.status.stage]
 
     def add_stage(
         self,
-        stage: Stage,
-        loader: DataLoader,
+        length: int,
         task_name: str = None,
     ):
+        stage = self.status.stage
         desc = task_name or stage.to_progress()
         task = self.bar.add_task(
             description=desc,
-            total=len(loader),
+            total=length,
             metrics="",
         )
         self.tasks[stage] = task
-        self.current_task = task
 
-    def hide_stage(self, stage: Stage):
-        if stage in self.tasks:
-            self.bar.remove_task(self.tasks[stage])
-            del self.tasks[stage]
+    def on_stage_change(self, **kwargs):
+        old_stage = kwargs["old_stage"]
+        if (
+            old_stage is not None
+            and old_stage != Stage.TRAIN
+            and old_stage in self.tasks
+        ):
+            self.bar.remove_task(self.tasks[old_stage])
+            del self.tasks[old_stage]
 
-    def set_stage(self, stage: Stage):
-        if stage in self.tasks:
-            self.current_task = self.tasks[stage]
-
-    def _prefix(self, stage: Stage, name: str):
+    def _prefix(self, name: str):
+        stage = self.status.stage
         if stage == Stage.TRAIN:
             return name
         return f"{stage.to_prefix()}_{name}"
 
-    def _register_metrics(self, stage: Stage, metrics: dict[str, float]):
+    def _register_metrics(self, metrics: dict[str, float]):
         for name, value in metrics.items():
-            name = self._prefix(stage, name)
+            name = self._prefix(name)
             self.metrics[name] = value
 
     def _metrics_to_str(self):
@@ -70,16 +80,14 @@ class Progress:
             str_metrics += f"{name}={value:.3f} "
         return str_metrics
 
-    def advance(self, stage: Stage, metrics: dict[str, float] = {}):
+    def advance(self, metrics: dict[str, float] = {}):
         # TODO: log metrics to a txt file too ? do that here or dedicated file logger rather?
 
-        self._register_metrics(stage, metrics)
+        self._register_metrics(metrics)
         metrics_str = self._metrics_to_str()
 
-        kwargs = {}
-        kwargs["metrics"] = metrics_str
-        kwargs["advance"] = 1
-        self.bar.update(self.current_task, **kwargs)
-
-    def stop(self):
-        self.bar.console.print("stopping " + str(self.current_task))
+        kwargs = dict(
+            metrics=metrics_str,
+            advance=1,
+        )
+        self.bar.update(self._current_task, **kwargs)
