@@ -11,7 +11,6 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler as Scheduler
 
 import pyroml as p
-from pyroml.config import Config
 from pyroml.callback import Callback
 from pyroml.checkpoint import Checkpoint
 from pyroml.utils import Stage, get_classname
@@ -26,7 +25,6 @@ class Step(Enum):
     METRIC_TARGET = "metric_target"
 
 
-StepData: TypeAlias = torch.Tensor | dict[torch.Tensor] | tuple[torch.Tensor]
 StepOutput: TypeAlias = dict[Step, torch.Tensor]
 
 
@@ -40,10 +38,11 @@ class PyroModel(Callback, nn.Module):
         self._trainer: "p.Trainer" = None
         self.optimizer: Optimizer
         self.scheduler: Scheduler | None
+        trainer: "p.Trainer" = None
 
     def step(
         self,
-        batch: StepData,
+        batch: torch.Tensor | dict[torch.Tensor] | tuple[torch.Tensor],
         stage: Stage,
     ) -> StepOutput:
         msg = "a step method must be implemented for your PyroModel model"
@@ -54,30 +53,26 @@ class PyroModel(Callback, nn.Module):
     ) -> dict[Metric] | None:
         pass
 
-    @property
-    def config(self) -> Config:
-        return self._trainer.config
-
     def _setup(self, trainer: "p.Trainer"):
-        self._trainer = trainer
+        self.trainer = trainer
 
     def _configure_optimizers(self):
-        config = self.config
+        tr = self.trainer
 
-        self.optimizer: Optimizer = config.optimizer(
-            self.parameters(), lr=config.lr, **config.optimizer_params
+        self.optimizer: Optimizer = tr.optimizer(
+            self.parameters(), lr=tr.lr, **tr.optimizer_params
         )
 
         self.scheduler: Scheduler | None = None
-        if config.scheduler is not None:
-            self.scheduler = config.scheduler(self.optimizer, **config.scheduler_params)
+        if tr.scheduler is not None:
+            self.scheduler = tr.scheduler(self.optimizer, **tr.scheduler_params)
 
     def _fit(self, output: StepOutput):
         """
         Perform a training step on the model using the output of the step method.
         Override this method if you wish to customize the training loop.
 
-        1. Computes loss based on config.loss
+        1. Computes loss based on trainer.loss
         2. Computes gradient using loss.backward()
         3. Clip the gradients if necessary
         4. Step the optimizer, effectively backpropagating the loss
@@ -87,14 +82,14 @@ class PyroModel(Callback, nn.Module):
         # Compute the loss
         pred = output[Step.PRED]
         target = output[Step.TARGET]
-        loss: torch.Tensor = self.config.loss(pred, target)
+        loss: torch.Tensor = self.trainer.loss(pred, target)
 
         # Compute gradients
         loss.backward()
 
         # Clip the gradients
-        if self.config.grad_norm_clip != None and self.config.grad_norm_clip != 0.0:
-            nn.utils.clip_grad_norm_(self.parameters(), self.config.grad_norm_clip)
+        if self.trainer.grad_norm_clip != None and self.trainer.grad_norm_clip != 0.0:
+            nn.utils.clip_grad_norm_(self.parameters(), self.trainer.grad_norm_clip)
 
         # Backpropagate the loss
         self.optimizer.step()
@@ -110,7 +105,7 @@ class PyroModel(Callback, nn.Module):
 
     def get_current_lr(self):
         if self.scheduler == None:
-            return self.config.lr
+            return self.trainer.lr
         return float(self.scheduler.get_last_lr()[0])
 
     # TODO !!!: even possible to return true in nn.Module?

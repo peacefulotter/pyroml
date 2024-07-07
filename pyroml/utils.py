@@ -7,8 +7,6 @@ import numpy as np
 import torch.nn as nn
 
 from enum import Enum
-from collections import defaultdict
-from torch.optim.lr_scheduler import LRScheduler as Scheduler
 
 log = logging.getLogger(__name__)
 
@@ -54,13 +52,6 @@ class Stage(Enum):
     TRAIN = "train"
     VAL = "validation"
     TEST = "test"
-
-    def to_progress(self):
-        return {
-            Stage.TRAIN: "Training",
-            Stage.VAL: "Validating",
-            Stage.TEST: "Testing",
-        }[self]
 
     def to_prefix(self):
         return {

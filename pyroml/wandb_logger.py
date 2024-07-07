@@ -3,21 +3,19 @@ import wandb
 
 import pyroml as p
 
-from pyroml.status import Status
-from pyroml.config import Config
-from pyroml.model import PyroModel
 from pyroml.callback import Callback
+from pyroml.loop.status import Status
 from pyroml.utils import Stage, get_classname
 
 
 class Wandb(Callback):
-    def __init__(self, model: PyroModel, config: Config, status: Status):
+    def __init__(self, trainer: "p.Trainer", model: "p.PyroModel", status: Status):
         # TODO: merge wandb and wandb_project into single config.wandb
         assert (
-            config.wandb_project != None
+            trainer.wandb_project != None
         ), "When config.wandb is set, you need to specify a project name too (config.wandb_project='my_project_name')"
         self.model = model
-        self.config = config
+        self.trainer = trainer
         self.status = status
 
         self.start_time = None
@@ -32,9 +30,9 @@ class Wandb(Callback):
         metrics = kwargs["metrics"]
         self._log(metrics=metrics)
 
-    def _on_end(self, **kwargs):
+    def _on_end(self, loop: FIX_LOOP_TRACKER, **kwargs):
         trainer: "p.Trainer" = kwargs.get("trainer")
-        metrics = trainer.metrics_tracker.get_epoch_metrics()
+        metrics = loop.tracker.get_epoch_metrics()
         self._log(metrics=metrics)
 
     def on_train_epoch_end(self, **kwargs):
@@ -56,20 +54,20 @@ class Wandb(Callback):
         run_name = self.get_run_name()
 
         # FIXME: make sure self.config is not modified by the .update()
-        # TODO: also make improve the .__dict__ usage; convert every value to string
-        wandb_config = self.config.__dict__
+        # TODO: also improve the .__dict__ usage; convert every value to string manually ?
+        wandb_config = self.trainer.__dict__
         attr_names = self._get_attr_names()
         wandb_config.update(attr_names)
 
         wandb.init(
-            project=self.config.wandb_project,
+            project=self.trainer.wandb_project,
             name=run_name,
             config=wandb_config,
         )
         wandb.define_metric("epoch")
         wandb.define_metric("step")
         wandb.define_metric("time")
-        # NOTE: what was this doing: wandb.define_metric("eval", step_metric="iter")
+        # NOTE: is this necessary? : wandb.define_metric("eval", step_metric="iter")
 
     def _log(self, metrics: dict[str, float]):
         status = self.status
@@ -97,6 +95,6 @@ class Wandb(Callback):
         attr_names = self._get_attr_names()
 
         run_name = "_".join(f"{attr}={name}" for attr, name in attr_names.items())
-        run_name += f"_lr={self.config.lr}_bs={self.config.batch_size}"
+        run_name += f"_lr={self.trainer.lr}_bs={self.trainer.batch_size}"
 
         return run_name

@@ -1,79 +1,131 @@
 import torch
 import logging
+import torch.nn as nn
 
-from typing import Callable
-from contextlib import nullcontext
+from pathlib import Path
+from torch.optim import Adam
 from torch.utils.data import Dataset
+from torch.optim.optimizer import Optimizer
+from torch.optim.lr_scheduler import LRScheduler as Scheduler
 
-
-from pyroml.autocast import Autocast
-from pyroml.callback import Callback
-from pyroml.status import Status
-from pyroml.utils import Stage
-from pyroml.config import Config
-from pyroml.progress_bar import ProgressBar
-from pyroml.wandb_logger import Wandb
-from pyroml.batch_iterator import BatchIterator
-from pyroml.checkpoint import Checkpoint
-from pyroml.metrics_tracker import MetricsTracker
-from pyroml.model import PyroModel, StepOutput
+import pyroml as p
+from pyroml.loop import TrainLoop, TestLoop
 
 log = logging.getLogger(__name__)
 
 
 class Trainer:
     # TODO: merge config into trainer? in that case, model should be passed as parameter to all public methods
-    def __init__(self, model: PyroModel, config: Config):
-        self.model = model
-        self.config = config
+    # TODO: log metrics to a txt file too ? do that here or dedicated file logger rather?
 
-        if self.config.verbose:
+    def __init__(
+        self,
+        loss: nn.Module = nn.MSELoss(),
+        lr: float = 1e-4,
+        max_epochs: int | None = None,
+        max_steps: int | None = 100,
+        optimizer: Optimizer = Adam,
+        optimizer_params=None,
+        scheduler: Scheduler | None = None,
+        scheduler_params=None,
+        grad_norm_clip: float = 1.0,
+        evaluate: bool | str = True,
+        evaluate_every: int = 10,
+        eval_max_steps: int | None = None,
+        device: str | torch.device = "auto",
+        dtype: torch.dtype = torch.float32,
+        compile: bool = True,
+        checkpoint_folder: str | Path = "./checkpoints",
+        batch_size: int = 64,
+        eval_batch_size: int = None,
+        num_workers: int = 4,
+        eval_num_workers: int = 0,
+        wandb: bool = True,
+        wandb_project: str | None = None,
+        verbose: bool = False,
+        debug: bool = False,
+        callbacks: list["p.Callback"] = [],
+    ):
+        """
+        Configuration object with the specified hyperparameters.
+
+        Args:
+            loss (torch.nn.Module): Loss function. Defaults to MSELoss.
+            lr (float, optional): Learning rate. Defaults to 1e-4.
+            max_epochs (int, > 0, optional): Number of epochs (if max_iterations is not defined). Defaults to None.
+            max_steps (int, > 0): Maximum number of iterations. Defaults to 100.
+            optimizer (torch.optim.Optimizer, optional): Optimizer. Defaults to Adam.
+            optimizer_params (dict, optional): Optimizer parameters. Defaults to None.
+            scheduler (torch.optim.lr_scheduler.LRScheduler, optional): Scheduler. Defaults to None.
+            scheduler_params (dict, optional): Scheduler parameters. Defaults to None.
+            grad_norm_clip (float, optional): Gradient norm clipping. Defaults to 1.0.
+            evaluate (bool or str, optional): Whether to periodically evaluate the model on the evaluation dataset, or 'epoch' to evaluate every epoch. Defaults to True.
+            evaluate_every (int, optional): Evaluate every `evaluate_every` iterations / or epoch if evaluate is set to 'epoch'. Defaults to 10.
+            eval_max_steps (int, optional): Maximum number of iterations for the evaluation dataset. Defaults to None.
+            dtype (torch.dtype, optional): Data type to cast model weights to. Defaults to torch.float32.
+            device (str, optional): Device to train on. Defaults to "auto" which will use GPU if available.
+            compile (bool, optional): Whether to compile the model, this can significantly improve training time but is not supported on all GPUs. Defaults to True.
+            checkpoint_folder (str, optional): Folder to save checkpoints. Defaults to "./checkpoints".
+            batch_size (int, optional): Batch size. Defaults to 64.
+            eval_batch_size (int, optional): Batch size for the evaluation dataset. Defaults to None in which case it will be equal to the training batch size.
+            num_workers (int, optional): Number of workers for the dataloader. Defaults to 4.
+            eval_num_workers (int, optional): Number of workers for the evaluation dataloader. Note that a value > 0 can cause an AssertionError: 'can only test a child process during evaluation'. Defaults to 0.
+            wandb (bool, optional): Whether to use wandb. Defaults to True.
+            wandb_project (str, optional): Wandb project name, if wandb is set to True. Defaults to None.
+            verbose (bool, optional): Whether to print details of whats going on in the system. Defaults to False.
+            debug: (bool, optional): Whether to print debug information. Defaults to False.
+            callbacks (list[Callback], optional): List of callbacks to use. Defaults to [].
+        Returns:
+            Config: Configuration object with the specified hyperparameters.
+        """
+
+        scheduler_params = scheduler_params or {}
+        optimizer_params = optimizer_params or {}
+        eval_batch_size = eval_batch_size or batch_size
+
+        # Training
+        self.lr = lr
+        self.loss = loss
+        self.max_epochs = max_epochs
+        self.max_steps = max_steps
+        self.optimizer = optimizer
+        self.optimizer_params = optimizer_params
+        self.scheduler = scheduler
+        self.scheduler_params = scheduler_params
+        self.grad_norm_clip = grad_norm_clip
+
+        # Validation
+        self.evaluate = evaluate
+        self.evaluate_every = evaluate_every
+        self.eval_max_steps = eval_max_steps
+
+        # Model
+        self.dtype = dtype
+        self.device = device
+        self.compile = compile
+        self.checkpoint_folder = checkpoint_folder
+
+        # Data
+        self.batch_size = batch_size
+        self.eval_batch_size = eval_batch_size
+        self.num_workers = num_workers
+        self.eval_num_workers = eval_num_workers
+
+        # Logging
+        self.wandb = wandb
+        self.wandb_project = wandb_project
+        self.verbose = verbose
+        self.debug = debug
+
+        # Callbacks
+        self.callbacks = callbacks
+
+        if self.verbose:
             log.setLevel(logging.INFO)
-        if self.config.debug:
+        if self.debug:
             log.setLevel(logging.DEBUG)
 
-        # Context manager for mixed precision training and moving to device - On cpu, only bfloat16 is supported
-        self.autocast = Autocast(config)
-
-        # Compile model if requested, improves performance
-        if self.config.compile:
-            self.compile_model()
-
-        self.model._setup(self)
-
-        self.status = Status(self)
-        self.metrics_tracker = MetricsTracker(model=self.model, status=self.status)
-
-        self.callbacks = config.callbacks
-        self.callbacks.append(self.model)
-        self.callbacks.append(self.autocast)
-
-        if config.wandb:
-            wandb = Wandb(model=self.model, config=self.config, status=self.status)
-            self.callbacks.append(wandb)
-
-        self.temp_callbacks: list[Callback] = []
-
-        self.progress: ProgressBar = None
-
-    def _trigger_callback(self, hook_name: str, stage_callback: bool = True, **kwargs):
-        _hook_name = f"on_"
-        if stage_callback:
-            _hook_name += f"{self.status.stage.value}_"
-        _hook_name += hook_name
-
-        kwargs["trainer"] = self
-        kwargs["epoch"] = self.status.epoch
-        kwargs["step"] = self.status.step
-
-        for cb in self.callbacks + self.temp_callbacks:
-            fn = getattr(cb, _hook_name)
-            if not callable(fn):
-                continue
-            log.debug(f"Triggering callback {_hook_name} for {cb} with args {kwargs}")
-            fn(**kwargs)
-
-    def compile_model(self):
+    def _compile_model(self):
         if self.model._is_compiled():
             log.info("Model is already compiled, skipping compilation")
             return
@@ -82,113 +134,25 @@ class Trainer:
         self.model = torch.compile(self.model)
         log.info(f"Model compiled!")
 
-    def _extract_loss(self, output):
-        if isinstance(output, dict):
-            return self._extract_loss(output["loss"])
-        elif isinstance(output, torch.Tensor):
-            return output
-        else:
-            raise ValueError(
-                "The return type of the model.step function should be a torch.Tensor, or dict[torch.Tensor]"
-            )
+    def _setup(self, model: "p.PyroModel"):
+        # Compile model if requested, improves performance
+        if self.config.compile:
+            self._compile_model()
 
-    def _generic_loop(
-        self,
-        stage: Stage,
-        dataset: Dataset,
-        progress: ProgressBar,
-        before_forward_cb: Callable = None,
-        after_forward_cb: Callable[[StepOutput], None] = None,
-        task_name: str = None,
+        model._setup(self)
+        self.model = model
+
+    def fit(
+        self, model: "p.PyroModel", tr_dataset: Dataset, ev_dataset: Dataset = None
     ):
-        self.temp_callbacks = [progress]
-        old_stage = self.status.stage
-        self.status.stage = stage
-        self._trigger_callback("start")
+        self._setup(model)
+        loop = TrainLoop(model=model, config=self.config, ev_dataset=ev_dataset)
+        return loop.run(tr_dataset)
 
-        def iterate(batch):
-            # Forward pass
-            with self.autocast:
-                if before_forward_cb:
-                    before_forward_cb()
-
-                output = self.model.step(batch, stage)
-
-                if after_forward_cb:
-                    after_forward_cb(output)
-
-            # Compute batch and epoch metrics
-            metrics = self.metrics_tracker.update(output=output)
-
-            # Advance the progress bar and log metrics
-            progress.advance(metrics=metrics)
-
-            return metrics
-
-        BatchIterator.iterate(
-            trainer=self,
-            dataset=dataset,
-            progress=progress,
-            task_name=task_name,
-            cb=iterate,
-        )
-
-        self._trigger_callback("end")
-        self.status.stage = old_stage
-        self.temp_callbacks = []
-
-    @torch.no_grad()
-    def _validation_loop(self, dataset):
-        self._generic_loop(
-            stage=Stage.VAL,
-            dataset=dataset,
-            progress=self.progress,
-        )
-
-    # TODO: Move this to a dedicated Loop(Callback) class
-    # such that we can remove the before_forward_cb and after_forward_cb
-    def _training_loop(self, tr_dataset: Dataset, ev_dataset: Dataset):
-
-        self.model._configure_optimizers()
-
-        def before_forward_cb():
-            if (
-                self.config.evaluate
-                and self.status.step % self.config.evaluate_every == 0
-            ):
-                self._validation_loop(ev_dataset)
-
-        self._generic_loop(
-            stage=Stage.TRAIN,
-            dataset=tr_dataset,
-            progress=self.progress,
-            before_forward_cb=before_forward_cb,
-            after_forward_cb=self.model._fit,
-            task_name="[blue]Epoch {epoch}[/blue]",
-        )
-
-    def fit(self, tr_dataset: Dataset, ev_dataset: Dataset = None):
-        if self.config.evaluate and ev_dataset is None:
-            log.warn(
-                "You have chosen to evaluate the model, but no evaluation dataset is passed. Ignoring evaluation."
-            )
-
-        self.progress = ProgressBar(self.status)
-        with self.progress.bar:
-            self._training_loop(tr_dataset, ev_dataset)
-
-        return self.metrics_tracker
-
-    def test(self, dataset):
-        progress = ProgressBar(self.status)
-        with progress.bar:
-            self._generic_loop(
-                stage=Stage.TEST,
-                dataset=dataset,
-                progress=progress,
-            )
-
-        return self.metrics_tracker
+    def test(self, model: "p.PyroModel", dataset: Dataset):
+        self._setup(model)
+        loop = TestLoop(model=model, config=self.config)
+        return loop.run(dataset)
 
     # @staticmethod
     # def load(
