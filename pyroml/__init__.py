@@ -1,3 +1,4 @@
+from pyroml.loop import *
 from pyroml.model import *
 from pyroml.utils import *
 from pyroml.trainer import *

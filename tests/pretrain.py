@@ -6,7 +6,6 @@ import torch
 import torch.nn as nn
 from dummy import DummyRegressionModel, DummyRegressionDataset
 from pyroml.trainer import Trainer
-from pyroml.config import Config
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -16,7 +15,7 @@ if __name__ == "__main__":
     in_dim = 16
     model = DummyRegressionModel(in_dim=in_dim)
     ds = DummyRegressionDataset(size=1024, in_dim=in_dim)
-    config = Config(
+    trainer = Trainer(
         max_steps=256,
         batch_size=16,
         lr=0.05,
@@ -25,8 +24,8 @@ if __name__ == "__main__":
         compile=False,
         verbose=True,
     )
-    trainer = Trainer.from_pretrained(model, config, path, resume=False)
-    trainer.fit(ds)
+    # trainer = Trainer.from_pretrained(model, config, path, resume=False)
+    trainer.fit(model, ds)
     x, y = ds[:]
     output = model(x)
     mse = nn.MSELoss()(output, y)

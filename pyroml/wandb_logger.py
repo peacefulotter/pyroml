@@ -30,16 +30,15 @@ class Wandb(Callback):
         metrics = kwargs["metrics"]
         self._log(metrics=metrics)
 
-    def _on_end(self, loop: FIX_LOOP_TRACKER, **kwargs):
-        trainer: "p.Trainer" = kwargs.get("trainer")
+    def _on_end(self, loop: "p.Loop"):
         metrics = loop.tracker.get_epoch_metrics()
         self._log(metrics=metrics)
 
-    def on_train_epoch_end(self, **kwargs):
-        self._on_end(**kwargs)
+    def on_train_epoch_end(self, _, loop: "p.Loop", **kwargs):
+        self._on_end(loop)
 
-    def on_validation_end(self, **kwargs):
-        self._on_end(**kwargs)
+    def on_validation_end(self, _, loop: "p.Loop", **kwargs):
+        self._on_end(loop)
 
     def _get_attr_names(self):
         attr_names = dict(

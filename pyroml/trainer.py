@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 
 class Trainer:
-    # TODO: merge config into trainer? in that case, model should be passed as parameter to all public methods
+    # Keep stats of runs from fit (and test?)
     # TODO: log metrics to a txt file too ? do that here or dedicated file logger rather?
 
     def __init__(
@@ -47,7 +47,7 @@ class Trainer:
         callbacks: list["p.Callback"] = [],
     ):
         """
-        Configuration object with the specified hyperparameters.
+        Trainer class specifying all training related parameters and exposing fit / test methods to interact with the model.
 
         Args:
             loss (torch.nn.Module): Loss function. Defaults to MSELoss.
@@ -136,23 +136,28 @@ class Trainer:
 
     def _setup(self, model: "p.PyroModel"):
         # Compile model if requested, improves performance
-        if self.config.compile:
+        if self.compile:
             self._compile_model()
 
         model._setup(self)
         self.model = model
 
+    # TODO: correct type for loop classname
+    def _call_loop(
+        self, Loop: "p.Loop", model: "p.PyroModel", dataset: Dataset, **kwargs
+    ):
+        self._setup(model)
+        loop = Loop(model=model, trainer=self, **kwargs)
+        loop.run(dataset)
+        return loop.tracker.records
+
     def fit(
         self, model: "p.PyroModel", tr_dataset: Dataset, ev_dataset: Dataset = None
     ):
-        self._setup(model)
-        loop = TrainLoop(model=model, config=self.config, ev_dataset=ev_dataset)
-        return loop.run(tr_dataset)
+        return self._call_loop(TrainLoop, model, tr_dataset, ev_dataset=ev_dataset)
 
     def test(self, model: "p.PyroModel", dataset: Dataset):
-        self._setup(model)
-        loop = TestLoop(model=model, config=self.config)
-        return loop.run(dataset)
+        return self._call_loop(TestLoop, model, dataset)
 
     # @staticmethod
     # def load(

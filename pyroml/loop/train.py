@@ -37,18 +37,22 @@ class TrainLoop(Loop):
 
     @property
     def max_steps(self):
-        raise self.trainer.max_steps
+        return self.trainer.max_steps
 
     @property
     def max_epochs(self):
-        raise self.trainer.max_epochs
+        return self.trainer.max_epochs
 
     def before_step(self):
         if (
             self.trainer.evaluate
             and self.status.step % self.trainer.evaluate_every == 0
         ):
-            EvalLoop(self.trainer, self.model, self.trainer).run(self.ev_dataset)
+            eval_loop = EvalLoop(trainer=self.trainer, model=self.model)
+            eval_loop.run(self.ev_dataset)
+            # TODO: save eval metrics in loop
+            # eval_loop.tracker
+            # remove eval progress bar, keep metrics
 
     def after_step(self, output: "p.StepOutput"):
         self.model._fit(output)

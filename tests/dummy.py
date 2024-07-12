@@ -36,7 +36,7 @@ class DummyClassificationModel(PyroModel):
     def step(self, batch, stage: Stage):
         x, y = batch
         pred = self(x)
-        return {Step.PRED: pred, Step.METRIC: torch.round(pred), Step.TARGET: y}
+        return {Step.PRED: pred, Step.METRIC_PRED: torch.round(pred), Step.TARGET: y}
 
 
 class DummyRegressionModel(PyroModel):

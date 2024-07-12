@@ -4,53 +4,63 @@ sys.path.append("..")
 
 import time
 import random
+import pyroml as p
 from pyroml import Stage, ProgressBar
+
+from dummy import DummyClassificationModel
 
 if __name__ == "__main__":
     epochs = 3
     iters = 10
 
-    trainer = None
-    p = ProgressBar()
+    model = DummyClassificationModel()
+    trainer = p.Trainer()
+    loop = p.TestLoop(trainer, model)
+    progress = ProgressBar(loop)
 
     metrics = {
         "loss": random.random(),
         "acc": random.random(),
     }
 
-    with p.bar:
-        p.on_train_start(trainer, **dict())
+    with progress.bar:
+        progress.on_train_start(trainer, loop, **dict())
 
         for e in range(epochs):
             tr_loader = range(30)
+            loop.loader = tr_loader
 
-            p.on_train_epoch_start(trainer, **dict())
+            progress.on_train_epoch_start(trainer, loop, **dict(epoch=e))
 
             # Training across dataset
             for i in tr_loader:
-                p.on_train_iter_start(trainer, **dict())
+                progress.on_train_iter_start(trainer, loop, **dict(epoch=e))
                 # --- Training step
                 metrics["loss"] = random.random()
                 metrics["acc"] = random.random()
                 time.sleep(random.random())
                 # --- End of training step
-                p.on_train_iter_end(trainer, metrics=metrics)
+                progress.on_train_iter_end(trainer, loop, metrics=metrics, epoch=e)
 
                 # --- Validation at some point during training
                 if i % iters == 0 and i > 0:
                     ev_loader = range(10)
-                    p.on_validation_start(trainer)
+                    progress.on_validation_start(trainer, loop, epoch=e)
 
                     for j in ev_loader:
-                        p.on_validation_iter_start(trainer, **dict())
+                        progress.on_validation_iter_start(
+                            trainer, loop, **dict(epoch=e)
+                        )
                         # --- Validation step
                         metrics["ev_loss"] = random.random()
                         metrics["ev_acc"] = random.random()
                         time.sleep(random.random())
                         # --- End of validation step
-                        p.on_validation_iter_end(trainer, metrics=metrics)
+                        progress.on_validation_iter_end(
+                            trainer, loop, metrics=metrics, epoch=e
+                        )
 
-                    p.on_validation_end(trainer)
+                    progress.on_validation_end(trainer, loop, epoch=e)
                 # --- End of validation
 
-            p.on_train_epoch_end(trainer, **dict())
+            progress.on_train_epoch_end(trainer, loop, **dict(epoch=e))

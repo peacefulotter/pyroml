@@ -21,15 +21,17 @@ class Loop:
         # Context manager for mixed precision training and moving to device - On cpu, only bfloat16 is supported
         self.autocast = Autocast(trainer)
 
-        self.status = Status(self)
-        self.tracker = MetricsTracker(model=self.model)
+        self.status = Status(loop=self)
+        self.tracker = MetricsTracker(loop=self)
 
         # Callbacks, in order of execution
         self.callbacks = trainer.callbacks
         self.callbacks.append(self.model)
-        self.callbacks.append(self.autocast)
+        # self.callbacks.append(self.autocast)
 
         self.temp_callbacks: list["p.Callback"] = []
+
+        self.loader: DataLoader | None = None
 
     def _trigger_callback(self, hook_name: str, stage_callback: bool = True, **kwargs):
         _hook_name = f"on_"
@@ -44,7 +46,7 @@ class Loop:
             if not callable(fn):
                 continue
             log.debug(f"Triggering callback {_hook_name} for {cb} with args {kwargs}")
-            fn(self, **kwargs)
+            fn(self.trainer, self, **kwargs)
 
     @property
     def stage(self):
@@ -64,9 +66,9 @@ class Loop:
     def after_step(self, output: "p.StepOutput"):
         pass
 
-    def _get_dataloader(self, stage: Stage, dataset: Dataset):
+    def _get_dataloader(self, dataset: Dataset):
         c = self.trainer
-        is_training = stage == Stage.TRAIN
+        is_training = self.stage == Stage.TRAIN
         batch_size = c.batch_size if is_training else c.eval_batch_size
         num_workers = c.num_workers if is_training else c.eval_num_workers
         sampler = RandomSampler(dataset, replacement=True) if is_training else None
@@ -81,13 +83,13 @@ class Loop:
         )
 
     def run(self, dataset: Dataset):
-        progress = ProgressBar()
+        progress = ProgressBar(self)
         self.temp_callbacks = [progress]
 
         self._trigger_callback("start")
 
-        loader = self._get_dataloader(dataset)
-        data_iter = iter(loader)
+        self.loader = self._get_dataloader(dataset)
+        data_iter = iter(self.loader)
 
         if self.max_epochs is None and self.max_steps is None:
             msg = "Either max_epochs or max_steps must be defined for training"
@@ -112,7 +114,7 @@ class Loop:
                     ):
                         break
 
-                    data_iter = iter(loader)
+                    data_iter = iter(self.loader)
                     batch = next(data_iter)
 
                     self.status.advance_epoch()
@@ -129,9 +131,7 @@ class Loop:
                     self.after_step(output)
 
                 # ----- Compute batch and epoch metrics
-                metrics = self.tracker.update(
-                    stage=self.stage, output=output, epoch=self.status.epoch
-                )
+                metrics = self.tracker.update(output=output)
 
                 self._trigger_callback("iter_end", metrics=metrics)
                 self.status.advance_step()

@@ -1,3 +1,5 @@
+from .base import Loop
+from .test import TestLoop
 from .status import Status
 from .train import TrainLoop
-from .test import TestLoop
+from .progress_bar import ProgressBar

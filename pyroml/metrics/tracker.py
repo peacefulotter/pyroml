@@ -17,11 +17,14 @@ class MissingStepKeyException(Exception):
 
 
 class MetricsTracker:
-    def __init__(self, model: PyroModel):
-        self.model = model
+    def __init__(self, loop: "p.Loop"):
+        self.model = loop.model
+        self.status = loop.status
 
-        self.records: dict["p.Stage", pd.DataFrame] = {}
-        self.metrics: dict["p.Stage", dict[str, Metric]] = {}
+        self.metrics = self.model.configure_metrics()
+        self.metrics: dict[str, Metric] = self._format_metrics(self.metrics)
+
+        self.records = pd.DataFrame([], columns=["epoch", "step"])
 
     def _format_metrics(self, metrics: dict[Metric] | None):
         if metrics is None:
@@ -31,12 +34,6 @@ class MetricsTracker:
         raise ValueError(
             "The return type of the model.configure_metrics function should be a dict[torchmetrics.Metric], or None"
         )
-
-    def _init_stage_metrics(self, stage: "p.Stage"):
-        metrics = self.model.configure_metrics()
-        metrics = self._format_metrics(metrics)
-        self.metrics[stage] = metrics
-        self.records[stage] = pd.DataFrame([], columns=["epoch", "step"])
 
     def _detach(self, x):
         if isinstance(x, torch.Tensor):
@@ -64,15 +61,14 @@ class MetricsTracker:
 
     def _register_metrics(
         self,
-        stage: "p.Stage",
         metric_cb,
         prefix_cb=None,
-    ):
+    ) -> dict[str, float]:
 
         metrics = {}
-        record = self.records[stage]
+        record = self.records
 
-        for name, metric in self.metric.items():
+        for name, metric in self.metrics.items():
             if prefix_cb is not None:
                 name = prefix_cb(name)
 
@@ -86,17 +82,18 @@ class MetricsTracker:
 
         return metrics
 
-    def _register_batch_metrics(self, stage: "p.Stage", output: "p.StepOutput"):
+    def _register_batch_metrics(self, output: "p.StepOutput") -> dict[str, float]:
         out_metric, out_target = self._extract_output(output)
 
-        batch_metrics = self._register_metrics(
-            stage, metric_cb=lambda m: m(out_metric, out_target)
-        )
+        def metric_cb(m: Metric):
+            return m(out_metric, out_target)
+
+        batch_metrics = self._register_metrics(metric_cb=metric_cb)
 
         # FIXME: Find a better way of integrating the loss into the metrics here (that will propagate to wandb and progress bar)
         # What if we add the config.loss to the metrics dict in the tracker?
         if "loss" in output:
-            record = self.records[stage]
+            record = self.records
             batch_metrics["loss"] = output["loss"]
             if "loss" not in record.columns:
                 record["loss"] = np.nan
@@ -105,8 +102,11 @@ class MetricsTracker:
 
         return batch_metrics
 
-    def _register_epoch_metrics(self, stage: "p.Stage"):
-        epoch_metrics = self._register_metrics(stage, metric_cb=lambda m: m.compute())
+    def _register_epoch_metrics(self):
+        def metric_cb(m: Metric):
+            return m.compute()
+
+        epoch_metrics = self._register_metrics(metric_cb=metric_cb)
         return epoch_metrics
 
     # NOTE: Maybe for later if we do trainer.predict() / trainer.test()
@@ -115,36 +115,36 @@ class MetricsTracker:
     # ):
 
     # TODO: refactor the following get metrics methods
+    # maybe save epoch metrics in different attribute
+    # on get metrics, merge based on step?
 
-    def get_batch_metrics(self, stage: "p.Stage"):
-        record = self.records[stage]
-        records_batch = record.loc[-1:, ~record.columns.str.contains("epoch")]
+    def get_batch_metrics(self):
+        records_batch = self.records.loc[
+            -1:, ~self.records.columns.str.contains("epoch")
+        ]
         return records_batch.to_dict(orient="list")
 
-    def get_epoch_metrics(self, stage: "p.Stage"):
-        record = self.records[stage]
-        records_epoch = record.loc[-1:, record.columns.str.contains("epoch")]
+    def get_epoch_metrics(self):
+        records_epoch = self.records.loc[
+            -1:, self.records.columns.str.contains("epoch")
+        ]
         return records_epoch.to_dict(orient="list")
 
-    def update(
-        self, stage: "p.Stage", output: "p.StepOutput", epoch: int
-    ) -> dict[str, float]:
-        if stage not in self.metrics:
-            self._init_stage_metrics()
+    def update(self, output: "p.StepOutput") -> dict[str, float]:
+        stage, epoch = self.status.stage, self.status.epoch
 
         # Register batch metrics
         metrics = self._register_batch_metrics(output)
 
         # Register epoch metrics
-        if epoch != self.records[stage].iloc[-1].epoch:
+        # TODO: on callback? on_epoch_end
+        if epoch != self.records.iloc[-1].epoch:
             epoch_metrics = self._register_epoch_metrics()
             metrics.update(epoch_metrics)
 
         return metrics
 
-    def plot(self, stage: "p.Stage" = None):
+    def plot(self):
         # TODO: subplots + pass ax=ax to metric.plot()
-        stages = [stage] if stage is not None else self.metrics.keys()
-        for stage in stages:
-            for _, metric in self.metrics[stage].items():
-                metric.plot()
+        for _, metric in self.metrics.items():
+            metric.plot()

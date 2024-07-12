@@ -15,7 +15,9 @@ from pyroml.callback import Callback
 
 
 class ProgressBar(Callback):
-    def __init__(self):
+    def __init__(self, loop: "p.Loop"):
+        self.status = loop.status
+
         self.bar = Progress(
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
@@ -28,51 +30,59 @@ class ProgressBar(Callback):
             TextColumn("{task.fields[metrics]}"),
         )
 
-        self.tasks: dict[Stage, TaskID] = {}
+        self.task = None
         self.metrics: dict[str, float] = {}
 
-    def on_train_epoch_start(self, trainer: "p.Trainer", **kwargs: "p.CallbackKwargs"):
-        length = len(trainer.train_loader)
-        self._add_stage(
-            stage=Stage.TRAIN, length=length, description="[blue]Epoch {epoch}[/blue]"
-        )
+    def on_train_epoch_start(
+        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
+    ):
+        length = len(loop.loader)
+        self._add_stage(length=length, description="[blue]Epoch {epoch}[/blue]")
 
     def on_validation_epoch_start(
-        self, trainer: "p.Trainer", **kwargs: "p.CallbackKwargs"
+        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
     ):
-        length = len(trainer.val_loader)
-        self._add_stage(stage=Stage.VAL, length=length, description="Validating")
+        length = len(loop.loader)
+        self._add_stage(length=length, description="Validating")
 
-    def on_test_epoch_start(self, trainer: "p.Trainer", **kwargs: "p.CallbackKwargs"):
-        length = len(trainer.test_loader)
-        self._add_stage(stage=Stage.TEST, length=length, description="Testing")
+    def on_test_epoch_start(
+        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
+    ):
+        length = len(loop.loader)
+        self._add_stage(length=length, description="Testing")
 
-    def on_train_iter_end(self, trainer: "p.Trainer", **kwargs: "p.MetricsKwargs"):
+    def on_train_iter_end(
+        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.MetricsKwargs"
+    ):
         self._advance(stage=Stage.TRAIN, **kwargs)
 
-    def on_validation_iter_end(self, trainer: "p.Trainer", **kwargs: "p.MetricsKwargs"):
+    def on_validation_iter_end(
+        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.MetricsKwargs"
+    ):
         self._advance(stage=Stage.VAL, **kwargs)
 
-    def on_test_iter_end(self, trainer: "p.Trainer", **kwargs: "p.MetricsKwargs"):
+    def on_test_iter_end(
+        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.MetricsKwargs"
+    ):
         self._advance(stage=Stage.TEST, **kwargs)
 
-    def on_validation_end(self, trainer: "p.Trainer", **kwargs: "p.CallbackKwargs"):
-        if Stage.VAL in self.tasks:
-            self.bar.remove_task(self.tasks[Stage.VAL])
-            del self.tasks[Stage.VAL]
+    def on_validation_end(
+        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
+    ):
+        if self.status.stage == Stage.VAL:
+            self.bar.remove_task(self.task)
+            self.task = None
 
     def _add_stage(
         self,
-        stage: "p.Stage",
         length: int,
         description: str = None,
     ):
-        task = self.bar.add_task(
+        self.task = self.bar.add_task(
             description=description,
             total=length,
             metrics="",
         )
-        self.tasks[stage] = task
 
     def _prefix(self, stage: "p.Stage", name: str):
         if stage == Stage.TRAIN:
@@ -91,15 +101,15 @@ class ProgressBar(Callback):
         return str_metrics
 
     def _advance(self, stage: "p.Stage", **kwargs: "p.MetricsKwargs"):
+        print(kwargs)
         epoch = kwargs["epoch"]
         metrics = kwargs["metrics"]
 
         metrics_str = self._register_metrics(stage, metrics)
 
-        current_task = self.tasks[stage]
         kwargs = dict(
             epoch=epoch,
             metrics=metrics_str,
             advance=1,
         )
-        self.bar.update(current_task, **kwargs)
+        self.bar.update(self.task, **kwargs)

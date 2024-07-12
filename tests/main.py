@@ -4,7 +4,6 @@ import torch
 sys.path.append("..")
 
 from dummy import DummyRegressionDataset, DummyRegressionModel
-from pyroml.config import Config
 from pyroml.trainer import Trainer
 
 if __name__ == "__main__":
@@ -31,7 +30,7 @@ if __name__ == "__main__":
         "total_steps": max_iterations,
     }
 
-    config = Config(
+    trainer = Trainer(
         lr=lr,
         max_steps=max_iterations,
         batch_size=16,
@@ -46,10 +45,8 @@ if __name__ == "__main__":
         compile=False,
         num_workers=0,
     )
-    trainer = Trainer(model, config)
-    trainer.fit(tr_ds, ev_ds)
+    metrics = trainer.fit(model, tr_ds, ev_ds)
+    print(metrics)
 
-    print(trainer.metrics_tracker.stats)
-
-    te_tracker = trainer.test(te_ds)
-    print(te_tracker.stats)
+    metrics = trainer.test(te_ds)
+    print(metrics)
