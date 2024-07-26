@@ -16,5 +16,4 @@ class TestLoop(EvalLoop):
         return Stage.TEST
 
     def run(self, dataset: Dataset):
-        with self.progress.bar:
-            super().run(dataset)
+        super().run(dataset)

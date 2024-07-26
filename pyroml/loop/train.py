@@ -7,7 +7,6 @@ from pyroml.utils import Stage
 from pyroml.loop.base import Loop
 from pyroml.loop.eval import EvalLoop
 from pyroml.wandb_logger import Wandb
-from pyroml.loop.progress_bar import ProgressBar
 
 
 log = logging.getLogger(__name__)
@@ -67,7 +66,4 @@ class TrainLoop(Loop):
     def run(self, dataset: Dataset):
         self.model._configure_optimizers()
         self.model.train()
-
-        # with self.progress.bar requires to be here otherwise called one more times in eval loop
-        with self.progress.bar:
-            super().run(dataset)
+        super().run(dataset)

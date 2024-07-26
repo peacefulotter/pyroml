@@ -1,5 +1,6 @@
 import logging
 
+from contextlib import nullcontext
 from torch.utils.data import Dataset, DataLoader, RandomSampler
 
 import pyroml as p
@@ -99,44 +100,46 @@ class Loop:
         if self.model.device != self.autocast.device:
             self.model = self.model.to(self.autocast.device)
 
-        while True:
-            if self.max_steps and self.status.step >= self.max_steps:
-                break
-
-            # --- Request next batch
-            try:
-                batch = next(data_iter)
-            except StopIteration:
-                self._trigger_callback("epoch_end")
-
-                if (
-                    self.max_epochs is not None
-                    and self.status.epoch + 1 >= self.max_epochs
-                ):
+        # progress bar context must not be opened twice (e.g. by train and val loop)
+        with self.progress.bar if self.stage != Stage.VAL else nullcontext():
+            while True:
+                if self.max_steps and self.status.step >= self.max_steps:
                     break
 
-                data_iter = iter(self.loader)
-                batch = next(data_iter)
+                # --- Request next batch
+                try:
+                    batch = next(data_iter)
+                except StopIteration:
+                    self._trigger_callback("epoch_end")
 
-                self.status.advance_epoch()
-                self._trigger_callback("epoch_start")
+                    if (
+                        self.max_epochs is not None
+                        and self.status.epoch + 1 >= self.max_epochs
+                    ):
+                        break
 
-            self.before_step()
+                    data_iter = iter(self.loader)
+                    batch = next(data_iter)
 
-            # --- Iteration starts
-            self._trigger_callback("iter_start")
+                    self.status.advance_epoch()
+                    self._trigger_callback("epoch_start")
 
-            # ----- Forward pass
-            with self.autocast:
-                output = self.model.step(batch, self.stage)
-                self.after_step(output)
+                self.before_step()
 
-            # ----- Compute batch and epoch metrics
-            metrics = self.tracker.update(output=output)
+                # --- Iteration starts
+                self._trigger_callback("iter_start")
 
-            self._trigger_callback("iter_end", metrics=metrics)
-            self.status.advance_step()
-            # --- Iteration ends
+                # ----- Forward pass
+                with self.autocast:
+                    output = self.model.step(batch, self.stage)
+                    self.after_step(output)
+
+                # ----- Compute batch and epoch metrics
+                metrics = self.tracker.update(output=output)
+
+                self._trigger_callback("iter_end", metrics=metrics)
+                self.status.advance_step()
+                # --- Iteration ends
 
         self._trigger_callback("end")
 

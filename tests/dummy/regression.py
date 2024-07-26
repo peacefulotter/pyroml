@@ -1,4 +1,5 @@
 import torch
+import time, random
 import torch.nn as nn
 from torch.utils.data import Dataset
 
@@ -24,8 +25,11 @@ class DummyRegressionDataset(Dataset):
 
 
 class DummyRegressionModel(PyroModel):
-    def __init__(self, in_dim=16):
+
+    def __init__(self, in_dim=16, sleeping=False):
         super().__init__()
+        self.in_dim = in_dim
+        self.sleeping = sleeping
         self.seq = nn.Sequential(
             nn.Linear(in_dim, in_dim * 2),
             nn.LeakyReLU(),
@@ -39,9 +43,8 @@ class DummyRegressionModel(PyroModel):
         }
 
     def forward(self, x):
-        import time, random
-
-        time.sleep(random.random())
+        if self.sleeping:
+            time.sleep(random.random())
         return self.seq(x)
 
     def step(self, batch, stage: Stage):

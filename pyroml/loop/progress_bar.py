@@ -15,23 +15,35 @@ from pyroml.callback import Callback
 
 
 class ProgressBar(Callback):
-    bar = Progress(
-        TextColumn("{task.description}"),
-        BarColumn(),
-        MofNCompleteColumn(),
-        TextColumn("•"),
-        TimeElapsedColumn(),
-        TextColumn("/"),
-        TimeRemainingColumn(),
-        TextColumn("•"),
-        TextColumn("{task.fields[metrics]}"),
-    )
+    bar: Progress = None
 
     def __init__(self, loop: "p.Loop"):
         self.status = loop.status
 
         self.task = None
         self.metrics: dict[str, float] = {}
+
+    def _create_bar(self):
+        ProgressBar.bar = Progress(
+            TextColumn("{task.description}"),
+            BarColumn(),
+            MofNCompleteColumn(),
+            TextColumn("•"),
+            TimeElapsedColumn(),
+            TextColumn("/"),
+            TimeRemainingColumn(),
+            TextColumn("•"),
+            TextColumn("{task.fields[metrics]}"),
+        )
+
+    def _stop_bar(self):
+        ProgressBar.bar.stop()
+        ProgressBar.bar = None
+
+    def on_train_start(
+        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
+    ):
+        self._create_bar()
 
     def on_train_epoch_start(
         self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
@@ -43,6 +55,11 @@ class ProgressBar(Callback):
     ):
         ProgressBar.bar.stop_task(self.task)
         self.task = None
+
+    def on_train_end(
+        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
+    ):
+        self._stop_bar()
 
     def on_validation_epoch_start(
         self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
@@ -64,11 +81,6 @@ class ProgressBar(Callback):
     ):
         self._advance(**kwargs)
 
-    def on_test_iter_end(
-        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.MetricsKwargs"
-    ):
-        self._advance(**kwargs)
-
     def on_validation_end(
         self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
     ):
@@ -76,6 +88,21 @@ class ProgressBar(Callback):
         ProgressBar.bar.stop_task(self.task)
         ProgressBar.bar.remove_task(self.task)
         self.task = None
+
+    def on_test_iter_end(
+        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.MetricsKwargs"
+    ):
+        self._advance(**kwargs)
+
+    def on_test_start(
+        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
+    ):
+        self._create_bar()
+
+    def on_test_end(
+        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
+    ):
+        self._stop_bar()
 
     def _add_stage(
         self,
