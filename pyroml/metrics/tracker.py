@@ -9,6 +9,8 @@ from torchmetrics import Metric
 import pyroml as p
 from pyroml.model import PyroModel, Step
 
+from .loss import LossMetric
+
 log = logging.getLogger(__name__)
 
 
@@ -23,8 +25,9 @@ class MetricsTracker:
 
         self.metrics = self.model.configure_metrics()
         self.metrics: dict[str, Metric] = self._format_metrics(self.metrics)
+        self.metrics["loss"] = LossMetric(loop=loop)
 
-        self.records = pd.DataFrame([], columns=["epoch", "step"])
+        self.records = pd.DataFrame([], columns=["stage", "epoch", "step"])
 
     def _format_metrics(self, metrics: dict[Metric] | None):
         if metrics is None:
@@ -86,27 +89,21 @@ class MetricsTracker:
         out_metric, out_target = self._extract_output(output)
 
         def metric_cb(m: Metric):
+            if isinstance(m, LossMetric):
+                return m(out_metric, out_target, output=output)
             return m(out_metric, out_target)
 
         batch_metrics = self._register_metrics(metric_cb=metric_cb)
-
-        # FIXME: Find a better way of integrating the loss into the metrics here (that will propagate to wandb and progress bar)
-        # What if we add the config.loss to the metrics dict in the tracker?
-        if "loss" in output:
-            record = self.records
-            batch_metrics["loss"] = output["loss"]
-            if "loss" not in record.columns:
-                record["loss"] = np.nan
-            N = len(record) - 1
-            record.loc[N, "loss"] = output["loss"]
-
         return batch_metrics
 
     def _register_epoch_metrics(self):
+        def prefix_cb(name: str):
+            return f"epoch_{name}"
+
         def metric_cb(m: Metric):
             return m.compute()
 
-        epoch_metrics = self._register_metrics(metric_cb=metric_cb)
+        epoch_metrics = self._register_metrics(prefix_cb=prefix_cb, metric_cb=metric_cb)
         return epoch_metrics
 
     # NOTE: Maybe for later if we do trainer.predict() / trainer.test()

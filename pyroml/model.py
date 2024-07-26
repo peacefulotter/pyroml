@@ -35,10 +35,14 @@ class MissingStepMethodException(Exception):
 class PyroModel(Callback, nn.Module):
     def __init__(self):
         super().__init__()
-        self._trainer: "p.Trainer" = None
+        self.trainer: "p.Trainer"
         self.optimizer: Optimizer
         self.scheduler: Scheduler | None
-        trainer: "p.Trainer" = None
+        self.device: torch.device = torch.device("cpu")
+
+    def to(self, device: torch.device):
+        self.device = device
+        return super().to(device)
 
     def step(
         self,
@@ -67,7 +71,14 @@ class PyroModel(Callback, nn.Module):
         if tr.scheduler is not None:
             self.scheduler = tr.scheduler(self.optimizer, **tr.scheduler_params)
 
-    def _fit(self, output: StepOutput):
+    def _compute_loss(self, output: StepOutput) -> torch.Tensor:
+        # Compute the loss
+        pred = output[Step.PRED]
+        target = output[Step.TARGET]
+        loss: torch.Tensor = self.trainer.loss(pred, target)
+        return loss
+
+    def _fit(self, output: StepOutput) -> torch.Tensor:
         """
         Perform a training step on the model using the output of the step method.
         Override this method if you wish to customize the training loop.
@@ -79,12 +90,8 @@ class PyroModel(Callback, nn.Module):
         5. Step the scheduler if available
         6. Zero the gradients
         """
-        # Compute the loss
-        pred = output[Step.PRED]
-        target = output[Step.TARGET]
-        loss: torch.Tensor = self.trainer.loss(pred, target)
-
-        # Compute gradients
+        # Compute loss and gradient
+        loss = self._compute_loss(output)
         loss.backward()
 
         # Clip the gradients
@@ -101,7 +108,7 @@ class PyroModel(Callback, nn.Module):
         # Zero the gradients
         self.optimizer.zero_grad(set_to_none=True)
 
-        output["loss"] = loss.item()
+        return loss
 
     def get_current_lr(self):
         if self.scheduler == None:

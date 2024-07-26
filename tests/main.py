@@ -3,7 +3,7 @@ import torch
 
 sys.path.append("..")
 
-from dummy import DummyRegressionDataset, DummyRegressionModel
+from dummy.regression import DummyRegressionDataset, DummyRegressionModel
 from pyroml.trainer import Trainer
 
 if __name__ == "__main__":
@@ -32,21 +32,21 @@ if __name__ == "__main__":
 
     trainer = Trainer(
         lr=lr,
+        dtype=torch.bfloat16,
         max_steps=max_iterations,
         batch_size=16,
         grad_norm_clip=None,
         wandb_project="pyro_test",
         evaluate=True,
-        evaluate_every=2,
+        evaluate_every=4,
         scheduler=scheduler,
         scheduler_params=scheduler_params,
-        verbose=False,
         wandb=False,
         compile=False,
         num_workers=0,
     )
-    metrics = trainer.fit(model, tr_ds, ev_ds)
+    metrics = trainer.fit(model=model, tr_dataset=tr_ds, ev_dataset=ev_ds)
     print(metrics)
 
-    metrics = trainer.test(te_ds)
+    metrics = trainer.test(model=model, dataset=te_ds)
     print(metrics)

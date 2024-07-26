@@ -13,7 +13,6 @@ log = logging.getLogger(__name__)
 
 
 class Loop:
-
     def __init__(self, trainer: "p.Trainer", model: "p.PyroModel"):
         self.trainer = trainer
         self.model = model
@@ -22,6 +21,7 @@ class Loop:
         self.autocast = Autocast(trainer)
 
         self.status = Status(loop=self)
+        self.progress = ProgressBar(loop=self)
         self.tracker = MetricsTracker(loop=self)
 
         # Callbacks, in order of execution
@@ -83,8 +83,7 @@ class Loop:
         )
 
     def run(self, dataset: Dataset):
-        progress = ProgressBar(self)
-        self.temp_callbacks = [progress]
+        self.temp_callbacks = [self.progress]
 
         self._trigger_callback("start")
 
@@ -97,7 +96,10 @@ class Loop:
 
         self._trigger_callback("epoch_start")
 
-        with progress.bar:
+        if self.model.device != self.autocast.device:
+            self.model = self.model.to(self.autocast.device)
+
+        with self.progress.bar:
             while True:
                 if self.max_steps and self.status.step >= self.max_steps:
                     break
@@ -138,3 +140,6 @@ class Loop:
                 # --- Iteration ends
 
         self._trigger_callback("end")
+
+        if self.stage != Stage.VAL:
+            self.model = self.model.cpu()

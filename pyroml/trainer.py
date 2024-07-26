@@ -36,7 +36,7 @@ class Trainer:
         dtype: torch.dtype = torch.float32,
         compile: bool = True,
         checkpoint_folder: str | Path = "./checkpoints",
-        batch_size: int = 64,
+        batch_size: int = 16,
         eval_batch_size: int = None,
         num_workers: int = 4,
         eval_num_workers: int = 0,
@@ -66,7 +66,7 @@ class Trainer:
             device (str, optional): Device to train on. Defaults to "auto" which will use GPU if available.
             compile (bool, optional): Whether to compile the model, this can significantly improve training time but is not supported on all GPUs. Defaults to True.
             checkpoint_folder (str, optional): Folder to save checkpoints. Defaults to "./checkpoints".
-            batch_size (int, optional): Batch size. Defaults to 64.
+            batch_size (int, optional): Batch size. Defaults to 16.
             eval_batch_size (int, optional): Batch size for the evaluation dataset. Defaults to None in which case it will be equal to the training batch size.
             num_workers (int, optional): Number of workers for the dataloader. Defaults to 4.
             eval_num_workers (int, optional): Number of workers for the evaluation dataloader. Note that a value > 0 can cause an AssertionError: 'can only test a child process during evaluation'. Defaults to 0.
@@ -147,7 +147,7 @@ class Trainer:
         self, Loop: "p.Loop", model: "p.PyroModel", dataset: Dataset, **kwargs
     ):
         self._setup(model)
-        loop = Loop(model=model, trainer=self, **kwargs)
+        loop: "p.Loop" = Loop(model=model, trainer=self, **kwargs)
         loop.run(dataset)
         return loop.tracker.records
 

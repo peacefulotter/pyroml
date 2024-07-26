@@ -14,6 +14,7 @@ class Status:
 
     def to_dict(self):
         return dict(
+            stage=self.stage,
             epoch=self.epoch,
             step=self.step,
         )

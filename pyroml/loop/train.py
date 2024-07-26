@@ -1,4 +1,5 @@
 import logging
+import pandas as pd
 from torch.utils.data import Dataset
 
 import pyroml as p
@@ -50,16 +51,22 @@ class TrainLoop(Loop):
         ):
             eval_loop = EvalLoop(trainer=self.trainer, model=self.model)
             eval_loop.run(self.ev_dataset)
-            # TODO: save eval metrics in loop
-            # eval_loop.tracker
-            # remove eval progress bar, keep metrics
+            # Save logged metrics
+            self.progress.metrics.update(eval_loop.progress.metrics)
+            # Save recorded metrics
+            eval_records = eval_loop.tracker.records
+            eval_records.epoch = self.status.epoch
+            self.tracker.records = pd.concat((self.tracker.records, eval_records))
+
+            print("END OF EVAL")
+            print(self.tracker.records)
 
     def after_step(self, output: "p.StepOutput"):
-        self.model._fit(output)
+        loss = self.model._fit(output)
+        # Register loss in output prevents the metrics tracker the need compute it again
+        output["loss"] = loss
 
     def run(self, dataset: Dataset):
         self.model._configure_optimizers()
-
-        self.model.to(self.autocast.device)
+        self.model.train()
         super().run(dataset)
-        self.model.cpu()

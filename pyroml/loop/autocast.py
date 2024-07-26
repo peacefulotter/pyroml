@@ -21,7 +21,7 @@ class Autocast(AbstractContextManager):
                 "Autocast is not supported on CPU with dtype != then bfloat16, data and model won't be casted automatically"
             )
         else:
-            torch.autocast(device_type=device_type, dtype=trainer.dtype)
+            self.ctx = torch.autocast(device_type=device_type, dtype=trainer.dtype)
             self.dtype = trainer.dtype
 
         self.device = torch.device(device=device_type)
