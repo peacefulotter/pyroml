@@ -8,7 +8,7 @@ from torchmetrics.classification import BinaryAccuracy, BinaryPrecision, BinaryR
 from pyroml.model import PyroModel, Step
 from pyroml.utils import Stage
 
-from regression import DummyRegressionDataset
+from dummy.regression import DummyRegressionDataset
 
 
 class DummyClassificationDataset(Dataset):
@@ -20,7 +20,7 @@ class DummyClassificationDataset(Dataset):
 
     def __getitem__(self, idx):
         x, y = self.ds[idx]
-        y = torch.where(y > 0, 1, 0)
+        y = torch.where(y > 0, 1, 0).float()
         return x, y
 
 
@@ -31,7 +31,6 @@ class DummyClassificationModel(PyroModel):
             nn.Linear(1, mid_dim),
             nn.LeakyReLU(),
             nn.Linear(mid_dim, 1),
-            nn.Sigmoid(),
         )
 
     def configure_metrics(self) -> dict[Metric]:

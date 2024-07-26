@@ -17,10 +17,9 @@ sys.path.append("..")
 
 from tests import WANDB_PROJECT
 
-from pyroml.config import Config
 from pyroml.trainer import Trainer
 from pyroml.utils import Stage, seed_everything
-from pyroml.model import PyroModel, StepData, Step
+from pyroml.model import PyroModel, Step
 
 
 class IrisNet(PyroModel):
@@ -42,12 +41,12 @@ class IrisNet(PyroModel):
             "rec": Recall(task="multiclass", num_classes=3),
         }
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.module(x)
 
     def step(self, data: tuple[torch.Tensor], stage: Stage):
         x, y = data
-        preds = self(x)
+        preds: torch.Tensor = self(x)
 
         metric_preds = preds.argmax(dim=1)
         metric_target = y.argmax(dim=1)
@@ -123,7 +122,7 @@ if __name__ == "__main__":
     max_epochs = 16
     batch_size = 16
 
-    config = Config(
+    trainer = Trainer(
         loss=nn.CrossEntropyLoss(),
         optimizer=torch.optim.AdamW,
         scheduler=torch.optim.lr_scheduler.OneCycleLR,
@@ -147,10 +146,8 @@ if __name__ == "__main__":
         debug=True,
     )
 
-    trainer = Trainer(model, config)
-    trainer.fit(tr_ds, ev_ds)
+    metrics = trainer.fit(model, tr_ds, ev_ds)
+    print(metrics)
 
-    print(trainer.metrics_tracker.record)
-
-    te_tracker = trainer.test(te_ds)
-    print(te_tracker.records[Stage.TEST])
+    metrics = trainer.test(te_ds)
+    print(metrics)

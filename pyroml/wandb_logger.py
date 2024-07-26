@@ -21,12 +21,16 @@ class Wandb(Callback):
         self.start_time = None
         self.cur_time = -1
 
-    def on_train_start(self, **kwargs):
+    def on_train_start(
+        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
+    ):
         self.start_time = -1
         self.cur_time = -1
         self._init()
 
-    def on_train_iter_end(self, **kwargs):
+    def on_train_iter_end(
+        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
+    ):
         metrics = kwargs["metrics"]
         self._log(metrics=metrics)
 
@@ -34,10 +38,14 @@ class Wandb(Callback):
         metrics = loop.tracker.get_epoch_metrics()
         self._log(metrics=metrics)
 
-    def on_train_epoch_end(self, _, loop: "p.Loop", **kwargs):
+    def on_train_epoch_end(
+        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
+    ):
         self._on_end(loop)
 
-    def on_validation_end(self, _, loop: "p.Loop", **kwargs):
+    def on_validation_end(
+        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
+    ):
         self._on_end(loop)
 
     def _get_attr_names(self):

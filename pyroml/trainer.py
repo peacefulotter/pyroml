@@ -125,6 +125,8 @@ class Trainer:
         if self.debug:
             log.setLevel(logging.DEBUG)
 
+        self.model: nn.Module = None
+
     def _compile_model(self):
         if self.model._is_compiled():
             log.info("Model is already compiled, skipping compilation")
@@ -135,6 +137,8 @@ class Trainer:
         log.info(f"Model compiled!")
 
     def _setup(self, model: "p.PyroModel"):
+        self.model = model
+
         # Compile model if requested, improves performance
         if self.compile:
             self._compile_model()
