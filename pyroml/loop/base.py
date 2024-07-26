@@ -99,45 +99,44 @@ class Loop:
         if self.model.device != self.autocast.device:
             self.model = self.model.to(self.autocast.device)
 
-        with self.progress.bar:
-            while True:
-                if self.max_steps and self.status.step >= self.max_steps:
+        while True:
+            if self.max_steps and self.status.step >= self.max_steps:
+                break
+
+            # --- Request next batch
+            try:
+                batch = next(data_iter)
+            except StopIteration:
+                self._trigger_callback("epoch_end")
+
+                if (
+                    self.max_epochs is not None
+                    and self.status.epoch + 1 >= self.max_epochs
+                ):
                     break
 
-                # --- Request next batch
-                try:
-                    batch = next(data_iter)
-                except StopIteration:
-                    self._trigger_callback("epoch_end")
+                data_iter = iter(self.loader)
+                batch = next(data_iter)
 
-                    if (
-                        self.max_epochs is not None
-                        and self.status.epoch + 1 >= self.max_epochs
-                    ):
-                        break
+                self.status.advance_epoch()
+                self._trigger_callback("epoch_start")
 
-                    data_iter = iter(self.loader)
-                    batch = next(data_iter)
+            self.before_step()
 
-                    self.status.advance_epoch()
-                    self._trigger_callback("epoch_start")
+            # --- Iteration starts
+            self._trigger_callback("iter_start")
 
-                self.before_step()
+            # ----- Forward pass
+            with self.autocast:
+                output = self.model.step(batch, self.stage)
+                self.after_step(output)
 
-                # --- Iteration starts
-                self._trigger_callback("iter_start")
+            # ----- Compute batch and epoch metrics
+            metrics = self.tracker.update(output=output)
 
-                # ----- Forward pass
-                with self.autocast:
-                    output = self.model.step(batch, self.stage)
-                    self.after_step(output)
-
-                # ----- Compute batch and epoch metrics
-                metrics = self.tracker.update(output=output)
-
-                self._trigger_callback("iter_end", metrics=metrics)
-                self.status.advance_step()
-                # --- Iteration ends
+            self._trigger_callback("iter_end", metrics=metrics)
+            self.status.advance_step()
+            # --- Iteration ends
 
         self._trigger_callback("end")
 

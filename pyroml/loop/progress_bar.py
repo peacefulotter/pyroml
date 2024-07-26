@@ -38,6 +38,12 @@ class ProgressBar(Callback):
     ):
         self._add_stage(loop=loop, desc=f"[blue]Epoch {loop.status.epoch}[/blue]")
 
+    def on_train_epoch_end(
+        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
+    ):
+        ProgressBar.bar.stop_task(self.task)
+        self.task = None
+
     def on_validation_epoch_start(
         self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
     ):
@@ -51,7 +57,6 @@ class ProgressBar(Callback):
     def on_train_iter_end(
         self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.MetricsKwargs"
     ):
-        epoch = kwargs["epoch"]
         self._advance(**kwargs)
 
     def on_validation_iter_end(
@@ -67,6 +72,8 @@ class ProgressBar(Callback):
     def on_validation_end(
         self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
     ):
+        ProgressBar.bar.update(self.task, visible=False)
+        ProgressBar.bar.stop_task(self.task)
         ProgressBar.bar.remove_task(self.task)
         self.task = None
 
@@ -100,6 +107,7 @@ class ProgressBar(Callback):
         return str_metrics
 
     def _advance(self, desc: str = None, **kwargs: "p.MetricsKwargs"):
+        # print("advanc", self.task)
         metrics = kwargs["metrics"]
         metrics_str = self._register_metrics(metrics)
 

@@ -7,6 +7,7 @@ from pyroml.utils import Stage
 from pyroml.loop.base import Loop
 from pyroml.loop.eval import EvalLoop
 from pyroml.wandb_logger import Wandb
+from pyroml.loop.progress_bar import ProgressBar
 
 
 log = logging.getLogger(__name__)
@@ -55,11 +56,8 @@ class TrainLoop(Loop):
             self.progress.metrics.update(eval_loop.progress.metrics)
             # Save recorded metrics
             eval_records = eval_loop.tracker.records
-            eval_records.epoch = self.status.epoch
+            eval_records["epoch"] = self.status.epoch
             self.tracker.records = pd.concat((self.tracker.records, eval_records))
-
-            print("END OF EVAL")
-            print(self.tracker.records)
 
     def after_step(self, output: "p.StepOutput"):
         loss = self.model._fit(output)
@@ -69,4 +67,7 @@ class TrainLoop(Loop):
     def run(self, dataset: Dataset):
         self.model._configure_optimizers()
         self.model.train()
-        super().run(dataset)
+
+        # with self.progress.bar requires to be here otherwise called one more times in eval loop
+        with self.progress.bar:
+            super().run(dataset)
