@@ -1,3 +1,5 @@
+# 0.0.14 will be the next major release, check this branch rather than main
+
 # 🔥 pyro
 
 <b style='font-size:16px'>Machine Learning framework allowing plug-and-play training for pytorch models</b>
