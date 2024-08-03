@@ -1,3 +1,6 @@
+# 0.0.14 will be the next major release, check the 0.0.14 branch rather than main
+
+
 # pyroml
 
 🔥 Machine Learning tool allowing plug-and-play training for pytorch models
