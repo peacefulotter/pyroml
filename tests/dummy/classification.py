@@ -25,7 +25,8 @@ class DummyClassificationDataset(Dataset):
 
 
 class DummyClassificationModel(PyroModel):
-    def __init__(self, mid_dim=16):
+    # Interestingly, with mid_dim=16 and seed=42, the model is naturally good at the dummy classification task :)
+    def __init__(self, mid_dim=24):
         super().__init__()
         self.seq = nn.Sequential(
             nn.Linear(1, mid_dim),
@@ -47,3 +48,12 @@ class DummyClassificationModel(PyroModel):
         x, y = batch
         pred = self(x)
         return {Step.PRED: pred, Step.METRIC_PRED: torch.round(pred), Step.TARGET: y}
+
+
+if __name__ == "__main__":
+
+    acc = 0
+    size = 2048
+    for x, y in DummyClassificationDataset(size=size):
+        acc += y.sum().item()
+    print(torch.allclose(acc / size, 0.5))
