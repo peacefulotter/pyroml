@@ -1,5 +1,6 @@
+from typing import Any
+
 import pyroml as p
-from pyroml.utils import Stage
 
 
 class Status:
@@ -12,9 +13,9 @@ class Status:
     def stage(self):
         return self.loop.stage
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         return dict(
-            stage=self.stage,
+            stage=self.stage.value,
             epoch=self.epoch,
             step=self.step,
         )

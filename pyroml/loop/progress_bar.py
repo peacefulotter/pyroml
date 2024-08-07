@@ -74,12 +74,12 @@ class ProgressBar(Callback):
     def on_train_iter_end(
         self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.MetricsKwargs"
     ):
-        self._advance(**kwargs)
+        self._advance(loop)
 
     def on_validation_iter_end(
         self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.MetricsKwargs"
     ):
-        self._advance(**kwargs)
+        self._advance(loop)
 
     def on_validation_end(
         self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
@@ -92,7 +92,7 @@ class ProgressBar(Callback):
     def on_test_iter_end(
         self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.MetricsKwargs"
     ):
-        self._advance(**kwargs)
+        self._advance(loop)
 
     def on_test_start(
         self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
@@ -133,9 +133,14 @@ class ProgressBar(Callback):
 
         return str_metrics
 
-    def _advance(self, desc: str = None, **kwargs: "p.MetricsKwargs"):
+    def _advance(
+        self,
+        loop: "p.Loop",
+        desc: str = None,
+    ):
         # print("advanc", self.task)
-        metrics = kwargs["metrics"]
+        metrics = loop.tracker.get_last_step_metrics()
+        metrics.update(loop.tracker.get_last_epoch_metrics())
         metrics_str = self._register_metrics(metrics)
 
         kwargs = dict(

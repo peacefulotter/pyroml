@@ -2,9 +2,8 @@ import sys
 
 sys.path.append("..")
 
-import time
-import random
 import torch
+import numpy as np
 from torch.utils.data import DataLoader
 
 import pyroml as p
@@ -67,12 +66,15 @@ if __name__ == "__main__":
     )
 
     epoch_rec = tracker.get_epoch_records()
-    print(epoch_rec)
     assert epoch_rec.shape[0] == epochs
 
     step_rec = tracker.get_step_records()
-    print(step_rec)
     assert step_rec.shape[0] == epochs * (tr_steps_per_epoch + ev_steps_per_epoch)
+    assert (
+        len(step_rec["stage"].unique()) == 1
+        and step_rec["stage"][0] == p.Stage.TEST.value
+    )
+    assert np.array_equal(np.arange(len(step_rec)), step_rec["step"])
 
     """
     from matplotlib import pyplot as plt

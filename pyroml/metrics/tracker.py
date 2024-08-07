@@ -8,6 +8,7 @@ from torchmetrics import Metric
 
 import pyroml as p
 from pyroml.model import PyroModel, Step
+from pyroml.callback import Callback
 
 from .loss import LossMetric
 
@@ -18,7 +19,10 @@ class MissingStepKeyException(Exception):
     pass
 
 
-class MetricsTracker:
+class MetricsTracker(Callback):
+
+    NO_NA_COLUMNS = ["stage", "epoch", "step"]
+
     def __init__(self, loop: "p.Loop"):
         self.model = loop.model
         self.status = loop.status
@@ -28,6 +32,9 @@ class MetricsTracker:
         self.metrics["loss"] = LossMetric(loop=loop)
 
         self.records = pd.DataFrame([], columns=["stage", "epoch", "step"])
+
+        self.current_step_metrics: dict[str, float] = {}
+        self.current_epoch_metrics: dict[str, float] = {}
 
     def _format_metrics(self, metrics: dict[Metric] | None):
         if metrics is None:
@@ -85,7 +92,7 @@ class MetricsTracker:
 
         return metrics
 
-    def _register_batch_metrics(self, output: "p.StepOutput") -> dict[str, float]:
+    def _register_step_metrics(self, output: "p.StepOutput") -> dict[str, float]:
         out_metric, out_target = self._extract_output(output)
 
         def metric_cb(m: Metric):
@@ -93,53 +100,52 @@ class MetricsTracker:
                 return m(out_metric, out_target, output=output)
             return m(out_metric, out_target)
 
-        batch_metrics = self._register_metrics(metric_cb=metric_cb)
-        return batch_metrics
-
-    def _register_epoch_metrics(self):
-        def prefix_cb(name: str):
-            return f"epoch_{name}"
-
-        def metric_cb(m: Metric):
-            return m.compute()
-
-        epoch_metrics = self._register_metrics(prefix_cb=prefix_cb, metric_cb=metric_cb)
-        return epoch_metrics
+        step_metrics = self._register_metrics(metric_cb=metric_cb)
+        return step_metrics
 
     # NOTE: Maybe for later if we do trainer.predict() / trainer.test()
     # def compute(
     #     self, model: PyroModel, stage: Stage, output: StepOutput
     # ):
 
-    # TODO: refactor the following get metrics methods
-    # maybe save epoch metrics in different attribute
-    # on get metrics, merge based on step?
+    def on_train_epoch_end(
+        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
+    ):
+        print("on_train_epoch_end")
 
-    def get_batch_metrics(self):
-        records_batch = self.records.loc[
-            -1:, ~self.records.columns.str.contains("epoch")
-        ]
-        return records_batch.to_dict(orient="list")
+        def prefix_cb(name: str):
+            return f"epoch_{name}"
 
-    def get_epoch_metrics(self):
-        records_epoch = self.records.loc[
-            -1:, self.records.columns.str.contains("epoch")
+        def metric_cb(m: Metric):
+            return m.compute()
+
+        self.current_epoch_metrics = self._register_metrics(
+            prefix_cb=prefix_cb, metric_cb=metric_cb
+        )
+
+    def _records_filter_cols(self, with_epoch=True) -> pd.DataFrame:
+        cols = [
+            c
+            for c in self.records.columns
+            if (with_epoch and "epoch" in c) or (not with_epoch and "epoch" not in c)
         ]
-        return records_epoch.to_dict(orient="list")
+
+        return self.records[cols].dropna()
+
+    def get_step_records(self) -> pd.DataFrame:
+        return self._records_filter_cols(with_epoch=False)
+
+    def get_epoch_records(self) -> pd.DataFrame:
+        return self._records_filter_cols(with_epoch=True)
+
+    def get_last_step_metrics(self):
+        return self.current_step_metrics
+
+    def get_last_epoch_metrics(self):
+        return self.current_epoch_metrics
 
     def update(self, output: "p.StepOutput") -> dict[str, float]:
-        stage, epoch = self.status.stage, self.status.epoch
-
-        # Register batch metrics
-        metrics = self._register_batch_metrics(output)
-
-        # Register epoch metrics
-        # TODO: on callback? on_epoch_end
-        if epoch != self.records.iloc[-1].epoch:
-            epoch_metrics = self._register_epoch_metrics()
-            metrics.update(epoch_metrics)
-
-        return metrics
+        self.current_step_metrics = self._register_step_metrics(output)
 
     def plot(self):
         # TODO: subplots + pass ax=ax to metric.plot()

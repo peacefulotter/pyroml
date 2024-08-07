@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 
 class Loop:
-    def __init__(self, trainer: "p.Trainer", model: "p.PyroModel"):
+    def __init__(self, trainer: "p.Trainer", model: "p.PyroModel") -> None:
         self.trainer = trainer
         self.model = model
 
@@ -27,6 +27,9 @@ class Loop:
 
         # Callbacks, in order of execution
         self.callbacks = trainer.callbacks
+        self.callbacks.append(
+            self.tracker
+        )  # first to allow other callbacks to use metrics
         self.callbacks.append(self.model)
         # self.callbacks.append(self.autocast)
 
@@ -34,7 +37,9 @@ class Loop:
 
         self.loader: DataLoader | None = None
 
-    def _trigger_callback(self, hook_name: str, stage_callback: bool = True, **kwargs):
+    def _trigger_callback(
+        self, hook_name: str, stage_callback: bool = True, **kwargs
+    ) -> None:
         _hook_name = f"on_"
         if stage_callback:
             _hook_name += f"{self.stage.value}_"
@@ -50,15 +55,15 @@ class Loop:
             fn(self.trainer, self, **kwargs)
 
     @property
-    def stage(self):
+    def stage(self) -> "p.Stage":
         raise NotImplementedError
 
     @property
-    def max_steps(self):
+    def max_steps(self) -> int:
         raise NotImplementedError
 
     @property
-    def max_epochs(self):
+    def max_epochs(self) -> int:
         raise NotImplementedError
 
     def before_step(self):
@@ -135,9 +140,9 @@ class Loop:
                     self.after_step(output)
 
                 # ----- Compute batch and epoch metrics
-                metrics = self.tracker.update(output=output)
+                self.tracker.update(output=output)
 
-                self._trigger_callback("iter_end", metrics=metrics)
+                self._trigger_callback("iter_end")
                 self.status.advance_step()
                 # --- Iteration ends
 

@@ -31,11 +31,11 @@ class Wandb(Callback):
     def on_train_iter_end(
         self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
     ):
-        metrics = kwargs["metrics"]
+        metrics = loop.tracker.get_last_step_metrics()
         self._log(metrics=metrics)
 
     def _on_end(self, loop: "p.Loop"):
-        metrics = loop.tracker.get_epoch_metrics()
+        metrics = loop.tracker.get_last_epoch_metrics()
         self._log(metrics=metrics)
 
     def on_train_epoch_end(
@@ -85,7 +85,8 @@ class Wandb(Callback):
         old_time = self.cur_time
         self.cur_time = time.time()
 
-        payload = {f"{status.stage.value}/{k}": v for k, v in metrics.items()}
+        print(metrics)
+        payload = {f"{status.stage.to_prefix()}/{k}": v for k, v in metrics.items()}
 
         if status.stage == Stage.TRAIN:
             payload.update(status.to_dict())
@@ -95,6 +96,7 @@ class Wandb(Callback):
         payload["dt_time"] = self.cur_time - old_time
         # payload = pd.json_normalize(payload, sep="/")
         # payload = payload.to_dict(orient="records")[0]
+        print(payload)
 
         wandb.log(payload)
 

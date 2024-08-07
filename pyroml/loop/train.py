@@ -60,7 +60,7 @@ class TrainLoop(Loop):
 
     def after_step(self, output: "p.StepOutput"):
         loss = self.model._fit(output)
-        # Register loss in output prevents the metrics tracker the need compute it again
+        # Register loss in output prevents the metrics tracker the need to compute it again
         output["loss"] = loss
 
     def run(self, dataset: Dataset):
