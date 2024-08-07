@@ -47,6 +47,7 @@ class TrainLoop(Loop):
     def before_step(self):
         if (
             self.trainer.evaluate
+            and self.ev_dataset is not None
             and self.status.step % self.trainer.evaluate_every == 0
         ):
             eval_loop = EvalLoop(trainer=self.trainer, model=self.model)

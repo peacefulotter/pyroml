@@ -32,6 +32,10 @@ class MissingStepMethodException(Exception):
     pass
 
 
+class MissingStepKeyException(Exception):
+    pass
+
+
 class PyroModel(Callback, nn.Module):
     def __init__(self):
         super().__init__()
@@ -72,7 +76,15 @@ class PyroModel(Callback, nn.Module):
             self.scheduler = tr.scheduler(self.optimizer, **tr.scheduler_params)
 
     def _compute_loss(self, output: StepOutput) -> torch.Tensor:
-        # Compute the loss
+        if Step.PRED not in output:
+            raise MissingStepKeyException(
+                f"Your model should return a Step.PRED tensor, corresponding to your model prediction, in the model' step method"
+            )
+        if Step.TARGET not in output:
+            raise MissingStepKeyException(
+                f"Your model should return a Step.TARGET tensor, corresponding to the dataset targets/labels, in the model' step method"
+            )
+
         pred = output[Step.PRED]
         target = output[Step.TARGET]
         loss: torch.Tensor = self.trainer.loss(pred, target)

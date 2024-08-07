@@ -111,8 +111,6 @@ class MetricsTracker(Callback):
     def on_train_epoch_end(
         self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
     ):
-        print("on_train_epoch_end")
-
         def prefix_cb(name: str):
             return f"epoch_{name}"
 

@@ -3,19 +3,19 @@ import torch
 
 sys.path.append("..")
 
-from pyroml import Config, Trainer, Stage
-from dummy import DummyRegressionDataset, DummyRegressionModel
+import pyroml as p
+from dummy.regression import DummyRegressionDataset, DummyRegressionModel
 
 if __name__ == "__main__":
-    te_ds = DummyRegressionDataset(size=64)
+    ds = DummyRegressionDataset(size=1024)
     model = DummyRegressionModel()
 
-    config = Config(
-        dtype=torch.bfloat16,
-        batch_size=4,
+    trainer = p.Trainer(
+        lr=0.01,
+        evaluate=False,
+        batch_size=32,
+        max_epochs=32,
         wandb=False,
         num_workers=0,
     )
-    trainer = Trainer(model, config)
-    tracker = trainer.test(te_ds)
-    print(tracker.records[Stage.TEST])
+    trainer.fit(model, ds)

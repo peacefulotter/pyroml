@@ -36,6 +36,7 @@ class Loop:
         self.temp_callbacks: list["p.Callback"] = []
 
         self.loader: DataLoader | None = None
+        self.estimated_number_steps: int | None = None
 
     def _trigger_callback(
         self, hook_name: str, stage_callback: bool = True, **kwargs
@@ -88,6 +89,16 @@ class Loop:
             num_workers=num_workers,
         )
 
+    def _estimate_number_steps(self, loader: DataLoader):
+        if self.max_epochs is None and self.max_steps is None:
+            msg = "Either max_epochs or max_steps must be defined for training"
+            raise ValueError(msg)
+
+        if self.max_steps is not None and self.max_steps > 0:
+            return self.max_steps
+
+        return self.max_epochs * len(loader)
+
     def run(self, dataset: Dataset):
         self.temp_callbacks = [self.progress]
 
@@ -96,9 +107,7 @@ class Loop:
         self.loader = self._get_dataloader(dataset)
         data_iter = iter(self.loader)
 
-        if self.max_epochs is None and self.max_steps is None:
-            msg = "Either max_epochs or max_steps must be defined for training"
-            raise ValueError(msg)
+        self.estimated_number_steps = self._estimate_number_steps(self.loader)
 
         self._trigger_callback("epoch_start")
 
@@ -108,7 +117,7 @@ class Loop:
         # progress bar context must not be opened twice (e.g. by train and val loop)
         with self.progress.bar if self.stage != Stage.VAL else nullcontext():
             while True:
-                if self.max_steps and self.status.step >= self.max_steps:
+                if self.status.step > self.estimated_number_steps:
                     break
 
                 # --- Request next batch

@@ -1,3 +1,4 @@
+import os
 from typing import TypedDict
 
 import pyroml as p
@@ -10,6 +11,17 @@ class CallbackKwargs(TypedDict):
 
 class MetricsKwargs(CallbackKwargs):
     metrics: dict[str, float]
+
+
+# TODO: find a way to attach decorator to all function preserved when a method is overriden
+#       without defining two methods, one for the decorator and one for overriding
+#       which creates duplicates and convoluted code
+# def with_verbose(func):
+#     def wrapper(*args, **kwargs):
+#         if os.environ["PYRO_VERBOSE"]:
+#             print(func, args, kwargs)
+#         func(*args, **kwargs)
+#     return wrapper
 
 
 class Callback:

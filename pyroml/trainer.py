@@ -50,31 +50,106 @@ class Trainer:
         Trainer class specifying all training related parameters and exposing fit / test methods to interact with the model.
 
         Args:
-            loss (torch.nn.Module): Loss function. Defaults to MSELoss.
-            lr (float, optional): Learning rate. Defaults to 1e-4.
-            max_epochs (int, > 0, optional): Number of epochs (if max_iterations is not defined). Defaults to None.
-            max_steps (int, > 0): Maximum number of iterations. Defaults to 100.
-            optimizer (torch.optim.Optimizer, optional): Optimizer. Defaults to Adam.
-            optimizer_params (dict, optional): Optimizer parameters. Defaults to None.
-            scheduler (torch.optim.lr_scheduler.LRScheduler, optional): Scheduler. Defaults to None.
-            scheduler_params (dict, optional): Scheduler parameters. Defaults to None.
-            grad_norm_clip (float, optional): Gradient norm clipping. Defaults to 1.0.
-            evaluate (bool or str, optional): Whether to periodically evaluate the model on the evaluation dataset, or 'epoch' to evaluate every epoch. Defaults to True.
-            evaluate_every (int, optional): Evaluate every `evaluate_every` iterations / or epoch if evaluate is set to 'epoch'. Defaults to 10.
-            eval_max_steps (int, optional): Maximum number of iterations for the evaluation dataset. Defaults to None.
-            dtype (torch.dtype, optional): Data type to cast model weights to. Defaults to torch.float32.
-            device (str, optional): Device to train on. Defaults to "auto" which will use GPU if available.
-            compile (bool, optional): Whether to compile the model, this can significantly improve training time but is not supported on all GPUs. Defaults to True.
-            checkpoint_folder (str, optional): Folder to save checkpoints. Defaults to "./checkpoints".
-            batch_size (int, optional): Batch size. Defaults to 16.
-            eval_batch_size (int, optional): Batch size for the evaluation dataset. Defaults to None in which case it will be equal to the training batch size.
-            num_workers (int, optional): Number of workers for the dataloader. Defaults to 4.
-            eval_num_workers (int, optional): Number of workers for the evaluation dataloader. Note that a value > 0 can cause an AssertionError: 'can only test a child process during evaluation'. Defaults to 0.
-            wandb (bool, optional): Whether to use wandb. Defaults to True.
-            wandb_project (str, optional): Wandb project name, if wandb is set to True. Defaults to None.
-            verbose (bool, optional): Whether to print details of whats going on in the system. Defaults to False.
-            debug: (bool, optional): Whether to print debug information. Defaults to False.
-            callbacks (list[Callback], optional): List of callbacks to use. Defaults to [].
+            loss (torch.nn.Module):
+                Loss function.
+                Defaults to MSELoss.
+
+            lr (float, optional):
+                Learning rate.
+                Defaults to 1e-4.
+
+            max_epochs (int, > 0, optional):
+                Number of epochs (if max_iterations is not defined).
+                Defaults to None.
+
+            max_steps (int, > 0):
+                Maximum number of iterations.
+                This parameters dominates max_epochs; if number of steps reaches max_steps, training will stop despite max_epochs not being reached.
+                Defaults to 100.
+
+            optimizer (torch.optim.Optimizer, optional):
+                Optimizer.
+                Defaults to Adam.
+
+            optimizer_params (dict, optional):
+                Optimizer parameters.
+                Defaults to None.
+
+            scheduler (torch.optim.lr_scheduler.LRScheduler, optional):
+                Scheduler.
+                Defaults to None.
+
+            scheduler_params (dict, optional):
+                Scheduler parameters.
+                Defaults to None.
+
+            grad_norm_clip (float, optional):
+                Gradient norm clipping.
+                Defaults to 1.0.
+
+            evaluate (bool or str, optional):
+                Whether to periodically evaluate the model on the evaluation dataset, or 'epoch' to evaluate every epoch.
+                Defaults to True.
+
+            evaluate_every (int, optional):
+                Evaluate every `evaluate_every` iterations / or epoch if evaluate is set to 'epoch'.
+                Defaults to 10.
+
+            eval_max_steps (int, optional):
+                Maximum number of iterations for the evaluation dataset.
+                Defaults to None.
+
+            dtype (torch.dtype, optional):
+                Data type to cast model weights to.
+                Defaults to torch.float32.
+
+            device (str, optional):
+                Device to train on. Defaults to "auto" which will use GPU if available.
+
+            compile (bool, optional):
+                Whether to compile the model, this can significantly improve training time but is not supported on all GPUs.
+                Defaults to True.
+
+            checkpoint_folder (str, optional):
+                Folder to save checkpoints.
+                Defaults to "./checkpoints".
+
+            batch_size (int, optional):
+                Training batch size. If eval_batch_size is None, evaluation batches will use this value
+                Defaults to 16.
+
+            eval_batch_size (int, optional):
+                Batch size for the evaluation dataset.
+                Defaults to None in which case it will be equal to the training batch size.
+
+            num_workers (int, optional):
+                Number of workers for the dataloader.
+                Defaults to 4.
+
+            eval_num_workers (int, optional):
+                Number of workers for the evaluation dataloader.
+                Note that a value > 0 can cause an AssertionError: 'can only test a child process during evaluation'.
+                Defaults to 0.
+
+            wandb (bool, optional):
+                Whether to use wandb.
+                Defaults to True.
+
+            wandb_project (str, optional):
+                Wandb project name, if wandb is set to True.
+                Defaults to None.
+
+            verbose (bool, optional):
+                Whether to print details of whats going on in the system.
+                Defaults to False.
+
+            debug: (bool, optional):
+                Whether to print debug information.
+                Defaults to False.
+
+            callbacks (list[Callback], optional):
+                List of callbacks to use.
+                Defaults to [].
         Returns:
             Config: Configuration object with the specified hyperparameters.
         """

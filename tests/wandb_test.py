@@ -23,6 +23,7 @@ if __name__ == "__main__":
     trainer = p.Trainer(
         dtype=torch.bfloat16,
         loss=nn.BCEWithLogitsLoss(),
+        lr=0.001,
         batch_size=16,
         max_epochs=8,
         evaluate=True,
