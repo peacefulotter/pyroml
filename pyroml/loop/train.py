@@ -29,7 +29,7 @@ class TrainLoop(Loop):
             )
 
         if trainer.wandb:
-            wandb = Wandb(trainer=self.trainer, model=self.model, status=self.status)
+            wandb = Wandb(self)
             self.callbacks.append(wandb)
 
     @property

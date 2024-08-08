@@ -7,13 +7,16 @@ import numpy as np
 from torch.utils.data import DataLoader
 
 import pyroml as p
-from pyroml.utils import Stage, seed_everything
+from pyroml.utils import Stage
 from pyroml.metrics.tracker import MetricsTracker
 
+from setup import setup_test
 from dummy.classification import DummyClassificationModel, DummyClassificationDataset
 
 
 if __name__ == "__main__":
+    setup_test()
+
     model = DummyClassificationModel()
     dataset = DummyClassificationDataset()
     loader = iter(DataLoader(dataset, batch_size=16, shuffle=True))

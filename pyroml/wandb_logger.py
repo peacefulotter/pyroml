@@ -9,14 +9,12 @@ from pyroml.utils import Stage, get_classname
 
 
 class Wandb(Callback):
-    def __init__(self, trainer: "p.Trainer", model: "p.PyroModel", status: Status):
+    def __init__(self, loop: "p.Loop"):
         # TODO: merge wandb and wandb_project into single config.wandb
         assert (
-            trainer.wandb_project != None
+            loop.trainer.wandb_project != None
         ), "When config.wandb is set, you need to specify a project name too (config.wandb_project='my_project_name')"
-        self.model = model
-        self.trainer = trainer
-        self.status = status
+        self.loop = loop
 
         self.start_time = None
         self.cur_time = -1
@@ -49,12 +47,13 @@ class Wandb(Callback):
         self._on_end(loop)
 
     def _get_attr_names(self):
+        m = self.loop.model
         attr_names = dict(
-            model=get_classname(self.model),
-            optim=get_classname(self.model.optimizer),
+            model=get_classname(m),
+            optim=get_classname(m.optimizer),
         )
-        if self.model.scheduler != None:
-            attr_names["sched"] = get_classname(self.model.scheduler)
+        if hasattr(m, "scheduler") and m.scheduler != None:
+            attr_names["sched"] = get_classname(m.scheduler)
         return attr_names
 
     def _init(self):
@@ -62,12 +61,12 @@ class Wandb(Callback):
 
         # FIXME: make sure self.config is not modified by the .update()
         # TODO: also improve the .__dict__ usage; convert every value to string manually ?
-        wandb_config = self.trainer.__dict__
+        wandb_config = self.loop.trainer.__dict__
         attr_names = self._get_attr_names()
         wandb_config.update(attr_names)
 
         wandb.init(
-            project=self.trainer.wandb_project,
+            project=self.loop.trainer.wandb_project,
             name=run_name,
             config=wandb_config,
         )
@@ -77,7 +76,7 @@ class Wandb(Callback):
         # NOTE: is this necessary? : wandb.define_metric("eval", step_metric="iter")
 
     def _log(self, metrics: dict[str, float]):
-        status = self.status
+        status = self.loop.status
 
         if self.start_time == -1:
             self.start_time = time.time()
@@ -91,7 +90,7 @@ class Wandb(Callback):
         if status.stage == Stage.TRAIN:
             payload.update(status.to_dict())
 
-        payload["lr"] = self.model.get_current_lr()
+        payload["lr"] = self.loop.model.get_current_lr()
         payload["time"] = time.time() - self.start_time
         payload["dt_time"] = self.cur_time - old_time
         # payload = pd.json_normalize(payload, sep="/")
@@ -104,6 +103,6 @@ class Wandb(Callback):
         attr_names = self._get_attr_names()
 
         run_name = "_".join(f"{attr}={name}" for attr, name in attr_names.items())
-        run_name += f"_lr={self.trainer.lr}_bs={self.trainer.batch_size}"
+        run_name += f"_lr={self.loop.trainer.lr}_bs={self.loop.trainer.batch_size}"
 
         return run_name

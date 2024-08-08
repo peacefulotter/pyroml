@@ -1,3 +1,5 @@
+import os
+import re
 import torch
 import logging
 import torch.nn as nn
@@ -9,10 +11,12 @@ from torch.optim.optimizer import Optimizer
 from torch.optim.lr_scheduler import LRScheduler as Scheduler
 
 import pyroml as p
-from pyroml.utils import get_classname
+
 from pyroml.checkpoint import Checkpoint
 from pyroml.loop import TrainLoop, TestLoop
+from pyroml.log import set_level_all_loggers
 from pyroml.hparams import WithHyperParameters
+from pyroml.utils import get_classname, get_date
 
 log = logging.getLogger(__name__)
 
@@ -49,8 +53,7 @@ class Trainer(WithHyperParameters):
         eval_num_workers: int = 0,
         wandb: bool = True,
         wandb_project: str | None = None,
-        verbose: bool = False,
-        debug: bool = False,
+        log_level: int = logging.INFO,
         callbacks: list["p.Callback"] = [],
     ):
         """
@@ -146,13 +149,9 @@ class Trainer(WithHyperParameters):
                 Wandb project name, if wandb is set to True.
                 Defaults to None.
 
-            verbose (bool, optional):
-                Whether to print details of whats going on in the system.
-                Defaults to False.
-
-            debug: (bool, optional):
-                Whether to print debug information.
-                Defaults to False.
+            log_level: (int, optional):
+                Logger level. Use logging.X to get the integer corresponding to the level you want
+                Defaults to logging.INFO
 
             callbacks (list[Callback], optional):
                 List of callbacks to use.
@@ -160,7 +159,7 @@ class Trainer(WithHyperParameters):
         Returns:
             Config: Configuration object with the specified hyperparameters.
         """
-        super().__init__(hparams_file=Checkpoint.TRAINER_HPARAMS)
+        super().__init__(hparams_file=Checkpoint.TRAINER_HPARAMS.value)
 
         scheduler_params = scheduler_params or {}
         optimizer_params = optimizer_params or {}
@@ -186,7 +185,9 @@ class Trainer(WithHyperParameters):
         self.dtype = dtype
         self.device = device
         self.compile = compile
+        self.version = 0
         self.checkpoint_folder = Path(checkpoint_folder)
+        self._fetch_version()
 
         # Data
         self.batch_size = batch_size
@@ -197,18 +198,28 @@ class Trainer(WithHyperParameters):
         # Logging
         self.wandb = wandb
         self.wandb_project = wandb_project
-        self.verbose = verbose
-        self.debug = debug
+        self.log_level = log_level
+        set_level_all_loggers(level=self.log_level)
+
+        # Miscs
+        self.date = get_date()
+
+        print("TODO: SAVE HPARAMS", dir(self))
 
         # Callbacks
         self.callbacks = callbacks
 
-        if self.verbose:
-            log.setLevel(logging.INFO)
-        if self.debug:
-            log.setLevel(logging.DEBUG)
-
         self.model: "p.PyroModel" = None
+
+    def _fetch_version(self):
+        for f in os.scandir(self.checkpoint_folder):
+            if not f.is_dir() or not re.match(r"v_(\d+)", f.name):
+                continue
+            version = int(f.name[2:])
+            self.version = max(self.version, version)
+
+        self.version += 1
+        self.checkpoint_folder = self.checkpoint_folder / f"v_{self.version}"
 
     def _compile_model(self):
         if self.model._is_compiled():
@@ -249,40 +260,53 @@ class Trainer(WithHyperParameters):
         return self._call_loop(TestLoop, model, dataset)
 
     def save_state(self, folder: Path | str = None):
-        folder = Path(folder) or self.checkpoint_folder
-
         # Saving state
         state = {
             "compiled": self.model._is_compiled(),
             "optimizer_name": get_classname(self.optimizer),
             "optimizer": self.optimizer.state_dict(),
         }
-        
+
         if hasattr(self, "scheduler"):
             state["scheduler_name"] = get_classname(self.scheduler)
             state["scheduler"] = self.scheduler.state_dict()
 
-        torch.save(state, folder / Checkpoint.TRAINER_STATE)
+        folder = Path(folder) or self.checkpoint_folder
+        os.makedirs(folder, exist_ok=True)
+
+        f = folder / Checkpoint.TRAINER_STATE.value
+        torch.save(obj=state, f=f)
 
     def load_state(self, folder: Path | str = None):
         folder = Path(folder) or self.checkpoint_folder
-        state = torch.load(folder / Checkpoint.TRAINER_STATE, map_location="cpu")
+        state = torch.load(folder / Checkpoint.TRAINER_STATE.value, map_location="cpu")
 
         self.optimizer.load_state_dict(state["optimizer"])
         if hasattr(self, "scheduler") and "scheduler" in state:
             self.scheduler.load_state_dict(state["scheduler"])
 
-    # @staticmethod
-    # def load(
-    #     folder: Path | str = None,
-    #     resume: bool = True,
-    #     strict: bool = True,
-    # ):
-    #     """
-    #     Loads a pretrained model from a specified checkpoint folder.
+    @staticmethod
+    def load(
+        self,
+        folder: Path | str,
+        resume: bool = True,
+        strict: bool = True,
+    ):
+        """
+        Loads a pretrained model from a specified checkpoint folder.
 
-    #     Args:
-    #         folder (str): The folder path where the pretrained model is saved.
-    #         resume (bool, optional): Whether to resume training from the checkpoint. Defaults to True.
-    #         strict (bool, optional): Whether to strictly enforce the shape and type of the loaded weights. Defaults to True.
-    #     """
+        Args:
+            folder (str): The folder path where the pretrained model is saved.
+            resume (bool, optional): Whether to resume training from the checkpoint. Defaults to True.
+            strict (bool, optional): Whether to strictly enforce the shape and type of the loaded weights. Defaults to True.
+        """
+        folder = Path(folder)
+        hparams_file = (
+            folder
+            if os.path.isfile(folder)
+            else folder / Checkpoint.TRAINER_HPARAMS.value
+        )
+        args = WithHyperParameters._load_hparams(hparams_file)
+        print(args)
+        trainer = Trainer(**args)
+        raise "TODO"

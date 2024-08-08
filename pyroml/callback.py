@@ -27,7 +27,6 @@ class Callback:
             for func in dir(Callback)
             if callable(getattr(Callback, func)) and func.startswith("on_")
         ]
-        print("Callback", log)
         if attr in methods and get_bool_env(PyroEnv.VERBOSE):
             print(f"Class {self.__class__.__name__} calling callback {attr}")
             log.debug(f"Class {self.__class__.__name__} calling callback {attr}")
