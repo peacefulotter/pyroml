@@ -28,10 +28,9 @@ def get_folder(self):
 
 class Checkpoint(Enum):
     MODEL_WEIGHTS = "model_weights.safetensors"
-    # FIXME: should model_state even exist? Store optimizer / scheduler to the trainer state
-    MODEL_STATE = "model_state.pt"
-    MODEL_HPARAM = "model_hparams.json"
 
-    # TODO: separate config and training file
-    # NOTE: Probably the status class should handle saving the trainer state
+    # FIXME: should model_state even exist? Store optimizer / scheduler to the trainer state
+    MODEL_HPARAMS = "model_hparams.json"
+
     TRAINER_STATE = "training_state.pt"
+    TRAINER_HPARAMS = "trainer_hparams.json"

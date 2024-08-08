@@ -162,3 +162,4 @@ cython_debug/
 checkpoints/
 wandb/
 tests/*data*/
+tests/*.st

@@ -14,13 +14,6 @@ from dummy.classification import DummyClassificationModel, DummyClassificationDa
 
 
 if __name__ == "__main__":
-    SEED = 42
-    seed_everything(SEED)
-
-    import os
-
-    os.environ["PYRO_VERBOSE"] = "True"
-
     model = DummyClassificationModel()
     dataset = DummyClassificationDataset()
     loader = iter(DataLoader(dataset, batch_size=16, shuffle=True))

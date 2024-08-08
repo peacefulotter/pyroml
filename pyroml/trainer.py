@@ -9,12 +9,19 @@ from torch.optim.optimizer import Optimizer
 from torch.optim.lr_scheduler import LRScheduler as Scheduler
 
 import pyroml as p
+from pyroml.utils import get_classname
+from pyroml.checkpoint import Checkpoint
 from pyroml.loop import TrainLoop, TestLoop
+from pyroml.hparams import WithHyperParameters
 
 log = logging.getLogger(__name__)
 
 
-class Trainer:
+class WrongModuleException(Exception):
+    pass
+
+
+class Trainer(WithHyperParameters):
     # Keep stats of runs from fit (and test?)
     # TODO: log metrics to a txt file too ? do that here or dedicated file logger rather?
 
@@ -153,6 +160,7 @@ class Trainer:
         Returns:
             Config: Configuration object with the specified hyperparameters.
         """
+        super().__init__(hparams_file=Checkpoint.TRAINER_HPARAMS)
 
         scheduler_params = scheduler_params or {}
         optimizer_params = optimizer_params or {}
@@ -178,7 +186,7 @@ class Trainer:
         self.dtype = dtype
         self.device = device
         self.compile = compile
-        self.checkpoint_folder = checkpoint_folder
+        self.checkpoint_folder = Path(checkpoint_folder)
 
         # Data
         self.batch_size = batch_size
@@ -200,7 +208,7 @@ class Trainer:
         if self.debug:
             log.setLevel(logging.DEBUG)
 
-        self.model: nn.Module = None
+        self.model: "p.PyroModel" = None
 
     def _compile_model(self):
         if self.model._is_compiled():
@@ -221,10 +229,12 @@ class Trainer:
         model._setup(self)
         self.model = model
 
-    # TODO: correct type for loop classname
     def _call_loop(
         self, Loop: "p.Loop", model: "p.PyroModel", dataset: Dataset, **kwargs
     ):
+        if not isinstance(model, p.PyroModel):
+            raise WrongModuleException("Trainer loop model must be a PyroModel")
+
         self._setup(model)
         loop: "p.Loop" = Loop(model=model, trainer=self, **kwargs)
         loop.run(dataset)
@@ -237,6 +247,30 @@ class Trainer:
 
     def test(self, model: "p.PyroModel", dataset: Dataset):
         return self._call_loop(TestLoop, model, dataset)
+
+    def save_state(self, folder: Path | str = None):
+        folder = Path(folder) or self.checkpoint_folder
+
+        # Saving state
+        state = {
+            "compiled": self.model._is_compiled(),
+            "optimizer_name": get_classname(self.optimizer),
+            "optimizer": self.optimizer.state_dict(),
+        }
+        
+        if hasattr(self, "scheduler"):
+            state["scheduler_name"] = get_classname(self.scheduler)
+            state["scheduler"] = self.scheduler.state_dict()
+
+        torch.save(state, folder / Checkpoint.TRAINER_STATE)
+
+    def load_state(self, folder: Path | str = None):
+        folder = Path(folder) or self.checkpoint_folder
+        state = torch.load(folder / Checkpoint.TRAINER_STATE, map_location="cpu")
+
+        self.optimizer.load_state_dict(state["optimizer"])
+        if hasattr(self, "scheduler") and "scheduler" in state:
+            self.scheduler.load_state_dict(state["scheduler"])
 
     # @staticmethod
     # def load(
