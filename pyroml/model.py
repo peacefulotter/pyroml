@@ -1,13 +1,14 @@
 import os
 import torch
-import logging
+import warnings
 import torch.nn as nn
 import safetensors.torch as st
 
 from enum import Enum
 from pathlib import Path
-from torchmetrics import Metric
 from typing import TypeAlias
+from torch.optim import Adam
+from torchmetrics import Metric
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler as Scheduler
 
@@ -17,7 +18,7 @@ from pyroml.checkpoint import Checkpoint
 from pyroml.utils import Stage
 from pyroml.hparams import WithHyperParameters
 
-log = logging.getLogger(__name__)
+log = p.get_logger(__name__)
 
 
 class Step(Enum):
@@ -63,10 +64,16 @@ class PyroModel(WithHyperParameters, Callback, nn.Module):
     ) -> dict[Metric] | None:
         pass
 
+    def compile(self, *args, **kwargs):
+        log.info(f"Compiling model...")
+        model = torch.compile(self, *args, **kwargs)
+        log.info(f"Model compiled!")
+        return model
+
     def _setup(self, trainer: "p.Trainer"):
         self.trainer = trainer
 
-    def _configure_optimizers(self):
+    def configure_optimizers(self):
         tr = self.trainer
 
         self.optimizer: Optimizer = tr.optimizer(
@@ -116,7 +123,7 @@ class PyroModel(WithHyperParameters, Callback, nn.Module):
         self.optimizer.step()
 
         # Step the scheduler
-        if self.scheduler:
+        if hasattr(self, "scheduler") and self.scheduler is not None:
             self.scheduler.step()
 
         # Zero the gradients
@@ -125,7 +132,7 @@ class PyroModel(WithHyperParameters, Callback, nn.Module):
         return loss
 
     def get_current_lr(self):
-        if self.scheduler == None:
+        if not hasattr(self, "scheduler") or self.scheduler is None:
             return self.trainer.lr
         return float(self.scheduler.get_last_lr()[0])
 
@@ -176,4 +183,4 @@ class PyroModel(WithHyperParameters, Callback, nn.Module):
         model = self._get_module()
         missing, unexpected = st.load_model(model=model, filename=f, strict=strict)
         if not strict:
-            log.warn(f"Missing layers: {missing}\nUnexpected layers: {unexpected}")
+            warnings.warn(f"Missing layers: {missing}\nUnexpected layers: {unexpected}")

@@ -1,5 +1,4 @@
 import torch
-import logging
 
 from typing import cast
 from pathlib import Path
@@ -24,7 +23,7 @@ class AttributeNotFound(Exception):
     pass
 
 
-log = logging.getLogger(__name__)
+log = p.get_logger(__name__)
 
 
 class WithHyperParameters:

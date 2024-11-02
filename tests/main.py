@@ -19,17 +19,6 @@ if __name__ == "__main__":
 
     lr = 1e-2
     max_iterations = 256
-    scheduler = torch.optim.lr_scheduler.OneCycleLR
-    scheduler_params = {
-        "max_lr": lr,
-        "pct_start": 0.02,
-        "anneal_strategy": "cos",
-        "cycle_momentum": False,
-        "div_factor": 1e2,
-        "final_div_factor": 0.05,
-        "total_steps": max_iterations,
-    }
-
     trainer = Trainer(
         lr=lr,
         dtype=torch.bfloat16,
@@ -39,8 +28,6 @@ if __name__ == "__main__":
         wandb_project="pyro_test",
         evaluate=True,
         evaluate_every=4,
-        scheduler=scheduler,
-        scheduler_params=scheduler_params,
         wandb=False,
         compile=False,
         num_workers=0,

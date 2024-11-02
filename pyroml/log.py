@@ -1,8 +1,21 @@
 import logging
 
-logging.basicConfig()
-logging.root.setLevel(logging.WARNING)
-logging.basicConfig(level=logging.WARNING)
+from rich.logging import RichHandler
+
+
+def initialize_logging():
+    logging.basicConfig()
+    logging.root.setLevel(logging.WARNING)
+    logging.basicConfig(
+        level=logging.WARNING, handlers=[RichHandler(level=logging.WARNING)]
+    )
+
+
+def get_logger(name: str, level=logging.WARNING):
+    logging.basicConfig(level=level, handlers=[RichHandler(level=level)])
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    return logger
 
 
 def set_level_all_loggers(level: int):

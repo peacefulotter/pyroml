@@ -1,11 +1,10 @@
 import torch
-import logging
 import warnings
 from contextlib import AbstractContextManager, nullcontext
 
 import pyroml as p
 
-log = logging.getLogger(__name__)
+log = p.get_logger(__name__)
 
 
 class Autocast(AbstractContextManager):
@@ -17,9 +16,8 @@ class Autocast(AbstractContextManager):
         if device_type == "cpu" and trainer.dtype != torch.bfloat16:
             self.ctx = nullcontext()
             self.dtype = torch.float32
-            warnings.warn(
-                "Autocast is not supported on CPU with dtype != then bfloat16, data and model won't be casted automatically"
-            )
+            msg = "Autocast is not supported on CPU with dtype != then bfloat16, data and model won't be casted automatically"
+            log.warning(msg, stacklevel=2)
         else:
             self.ctx = torch.autocast(device_type=device_type, dtype=trainer.dtype)
             self.dtype = trainer.dtype

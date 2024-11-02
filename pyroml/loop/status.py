@@ -5,7 +5,7 @@ import pyroml as p
 
 class Status:
     def __init__(self, loop: "p.Loop"):
-        self.loop: "p.PyroModel" = loop
+        self.loop = loop
         self.epoch = 0
         self.step = 0
 

@@ -9,7 +9,7 @@ from pyroml.loop.eval import EvalLoop
 from pyroml.wandb_logger import Wandb
 
 
-log = logging.getLogger(__name__)
+log = p.get_logger(__name__)
 
 
 class TrainLoop(Loop):
@@ -64,7 +64,10 @@ class TrainLoop(Loop):
         # Register loss in output prevents the metrics tracker the need to compute it again
         output["loss"] = loss
 
-    def run(self, dataset: Dataset):
-        self.model._configure_optimizers()
+    def on_train_start(self, **kwargs: "p.CallbackKwargs"):
+        self.model.configure_optimizers(self)
         self.model.train()
-        super().run(dataset)
+
+    # def run(self, dataset: Dataset):
+
+    #     super().run(dataset)

@@ -14,17 +14,18 @@ from pyroml.utils import Stage
 from pyroml.callback import Callback
 
 
-class ProgressBar(Callback):
-    bar: Progress = None
+class Singleton(type):
+    _instances = {}
 
-    def __init__(self, loop: "p.Loop"):
-        self.status = loop.status
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        return cls._instances[cls]
 
-        self.task = None
-        self.metrics: dict[str, float] = {}
 
-    def _create_bar(self):
-        ProgressBar.bar = Progress(
+class SingletonBar(Progress, metaclass=Singleton):
+    def __init__(self):
+        super().__init__(
             TextColumn("{task.description}"),
             BarColumn(),
             MofNCompleteColumn(),
@@ -36,73 +37,52 @@ class ProgressBar(Callback):
             TextColumn("{task.fields[metrics]}"),
         )
 
-    def _stop_bar(self):
-        ProgressBar.bar.stop()
-        ProgressBar.bar = None
 
-    def on_train_start(
-        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
-    ):
-        self._create_bar()
+class ProgressBar(Callback):
+    def __init__(self, loop: "p.Loop"):
+        self.status = loop.status
+        self.bar = SingletonBar()
 
-    def on_train_epoch_start(
-        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
-    ):
+        self.task = None
+        self.metrics: dict[str, float] = {}
+
+    def on_train_epoch_start(self, **kwargs: "p.CallbackKwargs"):
+        loop = kwargs["loop"]
         self._add_stage(loop=loop, desc=f"[blue]Epoch {loop.status.epoch}[/blue]")
 
-    def on_train_epoch_end(
-        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
-    ):
-        ProgressBar.bar.stop_task(self.task)
+    def on_train_epoch_end(self, **kwargs: "p.CallbackKwargs"):
+        self.bar.stop_task(self.task)
         self.task = None
 
-    def on_train_end(
-        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
-    ):
-        self._stop_bar()
-
-    def on_validation_epoch_start(
-        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
-    ):
+    def on_validation_epoch_start(self, **kwargs: "p.CallbackKwargs"):
+        loop = kwargs["loop"]
         self._add_stage(loop=loop, desc="Validating")
 
-    def on_test_epoch_start(
-        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
-    ):
+    def on_test_epoch_start(self, **kwargs: "p.CallbackKwargs"):
+        loop = kwargs["loop"]
         self._add_stage(loop=loop, desc="Testing")
 
-    def on_train_iter_end(
-        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.MetricsKwargs"
-    ):
+    def on_train_iter_end(self, **kwargs: "p.MetricsKwargs"):
+        loop = kwargs["loop"]
         self._advance(loop)
 
-    def on_validation_iter_end(
-        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.MetricsKwargs"
-    ):
+    def on_validation_iter_end(self, **kwargs: "p.MetricsKwargs"):
+        loop = kwargs["loop"]
         self._advance(loop)
 
-    def on_validation_end(
-        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
-    ):
-        ProgressBar.bar.update(self.task, visible=False)
-        ProgressBar.bar.stop_task(self.task)
-        ProgressBar.bar.remove_task(self.task)
+    def on_validation_end(self, **kwargs: "p.CallbackKwargs"):
+        self.bar.update(self.task, visible=False)
+        self.bar.stop_task(self.task)
+        self.bar.remove_task(self.task)
         self.task = None
 
-    def on_test_iter_end(
-        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.MetricsKwargs"
-    ):
+    def on_test_iter_end(self, **kwargs: "p.MetricsKwargs"):
+        loop = kwargs["loop"]
         self._advance(loop)
 
-    def on_test_start(
-        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
-    ):
-        self._create_bar()
-
-    def on_test_end(
-        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
-    ):
-        self._stop_bar()
+    def on_test_end(self, **kwargs: "p.CallbackKwargs"):
+        self.bar.stop_task(self.task)
+        self.task = None
 
     def _add_stage(
         self,
@@ -110,7 +90,7 @@ class ProgressBar(Callback):
         desc: str = None,
     ):
         total = len(loop.loader)
-        self.task = ProgressBar.bar.add_task(
+        self.task = self.bar.add_task(
             metrics="",
             total=total,
             description=desc,
@@ -138,7 +118,6 @@ class ProgressBar(Callback):
         loop: "p.Loop",
         desc: str = None,
     ):
-        # print("advanc", self.task)
         metrics = loop.tracker.get_last_step_metrics()
         metrics.update(loop.tracker.get_last_epoch_metrics())
         metrics_str = self._register_metrics(metrics)
@@ -149,4 +128,4 @@ class ProgressBar(Callback):
         )
         if desc is not None:
             kwargs["description"] = desc
-        ProgressBar.bar.update(self.task, **kwargs)
+        self.bar.update(self.task, **kwargs)

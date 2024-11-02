@@ -8,7 +8,9 @@ import torch.nn as nn
 
 from enum import Enum
 
-log = logging.getLogger(__name__)
+import pyroml as p
+
+log = p.get_logger(__name__)
 
 
 def get_classname(obj):

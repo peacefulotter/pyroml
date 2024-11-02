@@ -12,7 +12,7 @@ from pyroml.callback import Callback
 
 from .loss import LossMetric
 
-log = logging.getLogger(__name__)
+log = p.get_logger(__name__)
 
 
 class MissingStepKeyException(Exception):
@@ -97,10 +97,15 @@ class MetricsTracker(Callback):
 
         def metric_cb(m: Metric):
             if isinstance(m, LossMetric):
-                return m(out_metric, out_target, output=output)
+                return m(output[Step.PRED], output[Step.TARGET], output=output)
             return m(out_metric, out_target)
 
         step_metrics = self._register_metrics(metric_cb=metric_cb)
+
+        # Add LR as metric in case a scheduler updates it over training
+        if self.status.stage == p.Stage.TRAIN:
+            step_metrics["lr"] = self.model.get_current_lr()
+
         return step_metrics
 
     # NOTE: Maybe for later if we do trainer.predict() / trainer.test()
@@ -108,9 +113,14 @@ class MetricsTracker(Callback):
     #     self, model: PyroModel, stage: Stage, output: StepOutput
     # ):
 
-    def on_train_epoch_end(
-        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
-    ):
+    def _on_epoch_end(self, **kwargs: "p.CallbackKwargs"):
+        # Since an EvalLoop is created inside a TrainLoop
+        # we need to check if the current loop is the same as the one that created the tracker
+        # otherwise the this method will be called twice
+        loop = kwargs["loop"]
+        if self.status != loop.status:
+            return
+
         def prefix_cb(name: str):
             return f"epoch_{name}"
 
@@ -120,6 +130,15 @@ class MetricsTracker(Callback):
         self.current_epoch_metrics = self._register_metrics(
             prefix_cb=prefix_cb, metric_cb=metric_cb
         )
+
+    def on_train_epoch_end(self, **kwargs: "p.CallbackKwargs"):
+        self._on_epoch_end(**kwargs)
+
+    def on_validation_epoch_end(self, **kwargs: "p.CallbackKwargs"):
+        self._on_epoch_end(**kwargs)
+
+    def on_test_epoch_end(self, **kwargs: "p.CallbackKwargs"):
+        self._on_epoch_end(**kwargs)
 
     def _records_filter_cols(self, with_epoch=True) -> pd.DataFrame:
         cols = [

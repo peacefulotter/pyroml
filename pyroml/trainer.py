@@ -2,23 +2,27 @@ import os
 import re
 import torch
 import logging
+import warnings
+import pandas as pd
 import torch.nn as nn
 
 from pathlib import Path
-from torch.optim import Adam
 from torch.utils.data import Dataset
 from torch.optim.optimizer import Optimizer
 from torch.optim.lr_scheduler import LRScheduler as Scheduler
 
+
 import pyroml as p
 
+from pyroml.loop.autocast import Autocast
 from pyroml.checkpoint import Checkpoint
+from pyroml.log import initialize_logging
 from pyroml.loop import TrainLoop, TestLoop
 from pyroml.log import set_level_all_loggers
 from pyroml.hparams import WithHyperParameters
 from pyroml.utils import get_classname, get_date
 
-log = logging.getLogger(__name__)
+log = p.get_logger(__name__)
 
 
 class WrongModuleException(Exception):
@@ -26,7 +30,6 @@ class WrongModuleException(Exception):
 
 
 class Trainer(WithHyperParameters):
-    # Keep stats of runs from fit (and test?)
     # TODO: log metrics to a txt file too ? do that here or dedicated file logger rather?
 
     def __init__(
@@ -35,7 +38,7 @@ class Trainer(WithHyperParameters):
         lr: float = 1e-4,
         max_epochs: int | None = None,
         max_steps: int | None = 100,
-        optimizer: Optimizer = Adam,
+        optimizer: Optimizer = torch.optim.Adam,
         optimizer_params=None,
         scheduler: Scheduler | None = None,
         scheduler_params=None,
@@ -149,7 +152,7 @@ class Trainer(WithHyperParameters):
                 Wandb project name, if wandb is set to True.
                 Defaults to None.
 
-            log_level: (int, optional):
+            log_level (int, optional):
                 Logger level. Use logging.X to get the integer corresponding to the level you want
                 Defaults to logging.INFO
 
@@ -161,8 +164,6 @@ class Trainer(WithHyperParameters):
         """
         super().__init__(hparams_file=Checkpoint.TRAINER_HPARAMS.value)
 
-        scheduler_params = scheduler_params or {}
-        optimizer_params = optimizer_params or {}
         eval_batch_size = eval_batch_size or batch_size
 
         # Training
@@ -197,7 +198,7 @@ class Trainer(WithHyperParameters):
 
         # Logging
         self.wandb = wandb
-        self.wandb_project = wandb_project
+        self.wandb_project = self._get_wandb_project(wandb_project)
         self.log_level = log_level
         set_level_all_loggers(level=self.log_level)
 
@@ -209,7 +210,20 @@ class Trainer(WithHyperParameters):
         # Callbacks
         self.callbacks = callbacks
 
-        self.model: "p.PyroModel" = None
+        self.model: "p.PyroModel" | torch._dynamo.OptimizedModule = None
+
+        initialize_logging()
+
+        # Context manager for mixed precision training and moving to device - On cpu, only bfloat16 is supported
+        self.autocast = Autocast(self)
+
+    def _get_wandb_project(self, wandb_project: str | None):
+        project = wandb_project or os.environ["WANDB_PROJECT"]
+        if project == "" or project is None:
+            raise ValueError(
+                "Wandb project name is required, please set WANDB_PROJECT in your environment variables or pass wandb_project in the Trainer constructor"
+            )
+        return project
 
     def _fetch_version(self):
         for f in os.scandir(self.checkpoint_folder):
@@ -221,76 +235,80 @@ class Trainer(WithHyperParameters):
         self.version += 1
         self.checkpoint_folder = self.checkpoint_folder / f"v_{self.version}"
 
-    def _compile_model(self):
-        if self.model._is_compiled():
-            log.info("Model is already compiled, skipping compilation")
-            return
+    def _get_total_nb_steps(self, dataset: Dataset) -> int:
+        if self.max_steps:
+            return self.max_steps
+        if self.max_epochs:
+            return self.max_epochs * len(dataset) // self.batch_size
+        raise ValueError("Trainer max_steps or max_epochs must be defined")
 
-        log.info(f"Compiling model...")
-        self.model = torch.compile(self.model)
-        log.info(f"Model compiled!")
-
-    def _setup(self, model: "p.PyroModel"):
+    def _setup_model(self, model: "p.PyroModel", dataset: Dataset):
         self.model = model
 
         # Compile model if requested, improves performance
         if self.compile:
-            self._compile_model()
+            self.model.compile()
 
-        model._setup(self)
-        self.model = model
+        self.model._setup(self)
 
     def _call_loop(
         self, Loop: "p.Loop", model: "p.PyroModel", dataset: Dataset, **kwargs
-    ):
-        if not isinstance(model, p.PyroModel):
+    ) -> pd.DataFrame:
+        if not isinstance(model, p.PyroModel) and (
+            not isinstance(model, torch._dynamo.OptimizedModule)
+            or not isinstance(model._orig_mod, p.PyroModel)
+        ):
             raise WrongModuleException("Trainer loop model must be a PyroModel")
 
-        self._setup(model)
+        self._setup_model(model, dataset)
         loop: "p.Loop" = Loop(model=model, trainer=self, **kwargs)
         loop.run(dataset)
         return loop.tracker.records
 
     def fit(
         self, model: "p.PyroModel", tr_dataset: Dataset, ev_dataset: Dataset = None
-    ):
+    ) -> pd.DataFrame:
         return self._call_loop(TrainLoop, model, tr_dataset, ev_dataset=ev_dataset)
 
-    def test(self, model: "p.PyroModel", dataset: Dataset):
+    def test(self, model: "p.PyroModel", dataset: Dataset) -> pd.DataFrame:
         return self._call_loop(TestLoop, model, dataset)
 
-    def save_state(self, folder: Path | str = None):
+    def save_state(
+        self,
+        folder: Path | str = None,
+        file: Path | str = Checkpoint.TRAINER_STATE.value,
+    ) -> None:
         # Saving state
         state = {
             "compiled": self.model._is_compiled(),
-            "optimizer_name": get_classname(self.optimizer),
-            "optimizer": self.optimizer.state_dict(),
+            "optimizer_name": get_classname(self.model.optimizer),
+            "optimizer": self.model.optimizer.state_dict(),
         }
 
-        if hasattr(self, "scheduler"):
-            state["scheduler_name"] = get_classname(self.scheduler)
-            state["scheduler"] = self.scheduler.state_dict()
+        if hasattr(self.model, "scheduler"):
+            state["scheduler_name"] = get_classname(self.model.scheduler)
+            state["scheduler"] = self.model.scheduler.state_dict()
 
         folder = Path(folder) or self.checkpoint_folder
         os.makedirs(folder, exist_ok=True)
+        torch.save(obj=state, f=folder / file)
 
-        f = folder / Checkpoint.TRAINER_STATE.value
-        torch.save(obj=state, f=f)
-
-    def load_state(self, folder: Path | str = None):
+    def load_state(
+        self,
+        folder: Path | str = None,
+        file: Path | str = Checkpoint.TRAINER_STATE.value,
+    ) -> None:
         folder = Path(folder) or self.checkpoint_folder
-        state = torch.load(folder / Checkpoint.TRAINER_STATE.value, map_location="cpu")
+        state = torch.load(folder / file, map_location="cpu")
 
-        self.optimizer.load_state_dict(state["optimizer"])
+        self.model.optimizer.load_state_dict(state["optimizer"])
         if hasattr(self, "scheduler") and "scheduler" in state:
-            self.scheduler.load_state_dict(state["scheduler"])
+            self.model.scheduler.load_state_dict(state["scheduler"])
 
     @staticmethod
     def load(
-        self,
         folder: Path | str,
-        resume: bool = True,
-        strict: bool = True,
+        file: Path | str = Checkpoint.TRAINER_HPARAMS.value,
     ):
         """
         Loads a pretrained model from a specified checkpoint folder.
@@ -300,13 +318,27 @@ class Trainer(WithHyperParameters):
             resume (bool, optional): Whether to resume training from the checkpoint. Defaults to True.
             strict (bool, optional): Whether to strictly enforce the shape and type of the loaded weights. Defaults to True.
         """
+        """
+        Loads a trainer state from a specified checkpoint folder.
+
+        Args:
+            folder (str): The folder path where the pretrained model is saved.
+        """
         folder = Path(folder)
-        hparams_file = (
-            folder
-            if os.path.isfile(folder)
-            else folder / Checkpoint.TRAINER_HPARAMS.value
-        )
+        hparams_file = folder if os.path.isfile(folder) else folder / file
         args = WithHyperParameters._load_hparams(hparams_file)
+
+        # Resolve loss, optimizer and scheduler instances from name
+        args.loss = Trainer._instance_from_name(nn, args.loss)
+        args.optimizer = Trainer._instance_from_name(torch.optim, args.optimizer)
+        args.scheduler = Trainer._instance_from_name(
+            torch.optim.lr_scheduler, args.scheduler
+        )
         print(args)
+
+        warnings.warn(
+            "Loading callbacks is not supported, if you have custom callbacks please add them to the trainer again"
+        )
+
         trainer = Trainer(**args)
-        raise "TODO"
+        return trainer

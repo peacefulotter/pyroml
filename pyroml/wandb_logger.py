@@ -15,36 +15,40 @@ class Wandb(Callback):
             loop.trainer.wandb_project != None
         ), "When config.wandb is set, you need to specify a project name too (config.wandb_project='my_project_name')"
         self.loop = loop
+        self.reset_time()
 
+    def reset_time(self):
         self.start_time = None
-        self.cur_time = -1
+        self.cur_time = None
 
-    def on_train_start(
-        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
-    ):
-        self.start_time = -1
-        self.cur_time = -1
+    def on_train_start(self, **kwargs: "p.CallbackKwargs"):
+        self.reset_time()
         self._init()
 
-    def on_train_iter_end(
-        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
-    ):
+    def on_validation_start(self, **kwargs: "p.CallbackKwargs"):
+        self.reset_time()
+
+    def on_test_start(self, **kwargs: "p.CallbackKwargs"):
+        self.reset_time()
+
+    def on_train_iter_end(self, **kwargs: "p.CallbackKwargs"):
+        loop = kwargs["loop"]
         metrics = loop.tracker.get_last_step_metrics()
-        self._log(metrics=metrics)
+        self._log(loop=loop, metrics=metrics, on_epoch=False)
 
-    def _on_end(self, loop: "p.Loop"):
+    def _on_epoch_end(self, **kwargs: "p.CallbackKwargs"):
+        loop = kwargs["loop"]
         metrics = loop.tracker.get_last_epoch_metrics()
-        self._log(metrics=metrics)
+        self._log(loop=loop, metrics=metrics)
 
-    def on_train_epoch_end(
-        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
-    ):
-        self._on_end(loop)
+    def on_train_epoch_end(self, **kwargs: "p.CallbackKwargs"):
+        self._on_epoch_end(*kwargs)
 
-    def on_validation_end(
-        self, trainer: "p.Trainer", loop: "p.Loop", **kwargs: "p.CallbackKwargs"
-    ):
-        self._on_end(loop)
+    def on_validation_end(self, **kwargs: "p.CallbackKwargs"):
+        self._on_epoch_end(*kwargs)
+
+    def on_test_end(self, **kwargs: "p.CallbackKwargs"):
+        self._on_epoch_end(*kwargs)
 
     def _get_attr_names(self):
         m = self.loop.model
@@ -75,27 +79,32 @@ class Wandb(Callback):
         wandb.define_metric("time")
         # NOTE: is this necessary? : wandb.define_metric("eval", step_metric="iter")
 
-    def _log(self, metrics: dict[str, float]):
-        status = self.loop.status
+    def _log(self, loop: "p.Loop", metrics: dict[str, float], on_epoch=True):
+        status = loop.status
 
-        if self.start_time == -1:
+        if self.start_time is None:
             self.start_time = time.time()
+
+        if self.cur_time is None:
+            self.cur_time = time.time()
 
         old_time = self.cur_time
         self.cur_time = time.time()
 
-        print(metrics)
         payload = {f"{status.stage.to_prefix()}/{k}": v for k, v in metrics.items()}
 
-        if status.stage == Stage.TRAIN:
+        if status.stage == Stage.TRAIN and not on_epoch:
             payload.update(status.to_dict())
 
-        payload["lr"] = self.loop.model.get_current_lr()
-        payload["time"] = time.time() - self.start_time
-        payload["dt_time"] = self.cur_time - old_time
+        if not on_epoch:
+            payload["lr"] = loop.model.get_current_lr()
+            payload["time"] = time.time() - self.start_time
+            payload["dt_time"] = self.cur_time - old_time
+
+        print(payload)
+
         # payload = pd.json_normalize(payload, sep="/")
         # payload = payload.to_dict(orient="records")[0]
-        print(payload)
 
         wandb.log(payload)
 
