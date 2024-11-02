@@ -38,16 +38,21 @@ class ScheduledIrisNet(IrisNet):
             final_div_factor=0.05,
         )
 
+    def forward(self, x):
+        import time
+
+        time.sleep(0.1)
+        return super().forward(x)
+
 
 class TestCallback(p.Callback):
     def __init__(self, te_ds: torch.utils.data.Dataset):
         self.te_ds = te_ds
 
-    def on_train_epoch_end(
-        self, trainer: Trainer, loop: p.Loop, **kwargs: p.CallbackKwargs
-    ):
-        metrics = trainer.test(trainer.model, self.te_ds)
-        metrics.to_csv(f"iris_epoch={loop.status.epoch}.csv", index=False)
+    def on_train_epoch_end(self, **kwargs: p.CallbackKwargs):
+        pass
+        # metrics = trainer.test(trainer.model, self.te_ds)
+        # metrics.to_csv(f"iris_epoch={loop.status.epoch}.csv", index=False)
 
 
 if __name__ == "__main__":
@@ -66,7 +71,7 @@ if __name__ == "__main__":
     trainer = Trainer(
         compile=True,
         loss=nn.CrossEntropyLoss(),
-        max_epochs=16,
+        max_epochs=12,
         batch_size=16,
         lr=0.005,
         evaluate=True,

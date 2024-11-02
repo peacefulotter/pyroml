@@ -16,7 +16,7 @@ if __name__ == "__main__":
     model = DummyClassificationModel()
     trainer = p.Trainer()
     loop = p.TestLoop(trainer, model)
-    progress = ProgressBar(loop)
+    progress = ProgressBar()
 
     metrics = {
         "loss": random.random(),
