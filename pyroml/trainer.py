@@ -30,18 +30,12 @@ class WrongModuleException(Exception):
 
 
 class Trainer(WithHyperParameters):
-    # TODO: log metrics to a txt file too ? do that here or dedicated file logger rather?
-
     def __init__(
         self,
         loss: nn.Module = nn.MSELoss(),
         lr: float = 1e-4,
         max_epochs: int | None = None,
         max_steps: int | None = 100,
-        optimizer: Optimizer = torch.optim.Adam,
-        optimizer_params=None,
-        scheduler: Scheduler | None = None,
-        scheduler_params=None,
         grad_norm_clip: float = 1.0,
         evaluate: bool | str = True,
         evaluate_every: int = 10,
@@ -79,22 +73,6 @@ class Trainer(WithHyperParameters):
                 Maximum number of iterations.
                 This parameters dominates max_epochs; if number of steps reaches max_steps, training will stop despite max_epochs not being reached.
                 Defaults to 100.
-
-            optimizer (torch.optim.Optimizer, optional):
-                Optimizer.
-                Defaults to Adam.
-
-            optimizer_params (dict, optional):
-                Optimizer parameters.
-                Defaults to None.
-
-            scheduler (torch.optim.lr_scheduler.LRScheduler, optional):
-                Scheduler.
-                Defaults to None.
-
-            scheduler_params (dict, optional):
-                Scheduler parameters.
-                Defaults to None.
 
             grad_norm_clip (float, optional):
                 Gradient norm clipping.
@@ -171,10 +149,6 @@ class Trainer(WithHyperParameters):
         self.loss = loss
         self.max_epochs = max_epochs
         self.max_steps = max_steps
-        self.optimizer = optimizer
-        self.optimizer_params = optimizer_params
-        self.scheduler = scheduler
-        self.scheduler_params = scheduler_params
         self.grad_norm_clip = grad_norm_clip
 
         # Validation
@@ -205,7 +179,7 @@ class Trainer(WithHyperParameters):
         # Miscs
         self.date = get_date()
 
-        print("TODO: SAVE HPARAMS", dir(self))
+        print("TODO: TRAINER SAVE HPARAMS")
 
         # Callbacks
         self.callbacks = callbacks
@@ -329,11 +303,11 @@ class Trainer(WithHyperParameters):
         args = WithHyperParameters._load_hparams(hparams_file)
 
         # Resolve loss, optimizer and scheduler instances from name
-        args.loss = Trainer._instance_from_name(nn, args.loss)
-        args.optimizer = Trainer._instance_from_name(torch.optim, args.optimizer)
-        args.scheduler = Trainer._instance_from_name(
-            torch.optim.lr_scheduler, args.scheduler
-        )
+        args.loss = getattr(nn, args.loss)()
+
+        # TODO: find a way to reload the optimizer and scheduler to the model
+        # optim = getattr(torch.optim, args.optimizer)
+        # sched = getattr(torch.optim.lr_scheduler, args.scheduler)
         print(args)
 
         warnings.warn(

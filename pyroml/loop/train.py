@@ -1,4 +1,4 @@
-import logging
+import warnings
 import pandas as pd
 from torch.utils.data import Dataset
 
@@ -24,7 +24,7 @@ class TrainLoop(Loop):
         self.ev_dataset = ev_dataset
 
         if self.trainer.evaluate and self.ev_dataset is None:
-            log.warn(
+            warnings.warn(
                 "You have chosen to evaluate the model, but no evaluation dataset is passed. Ignoring evaluation."
             )
 
@@ -52,8 +52,10 @@ class TrainLoop(Loop):
         ):
             eval_loop = EvalLoop(trainer=self.trainer, model=self.model)
             eval_loop.run(self.ev_dataset)
-            # Save logged metrics
-            self.progress.metrics.update(eval_loop.progress.metrics)
+            # Update training progress bar with eval metrics
+            self.progress.update_metrics(
+                self, eval_loop.progress.metrics, advance=0, stage=Stage.TRAIN
+            )
             # Save recorded metrics
             eval_records = eval_loop.tracker.records
             eval_records["epoch"] = self.status.epoch
@@ -67,7 +69,3 @@ class TrainLoop(Loop):
     def on_train_start(self, **kwargs: "p.CallbackKwargs"):
         self.model.configure_optimizers(self)
         self.model.train()
-
-    # def run(self, dataset: Dataset):
-
-    #     super().run(dataset)

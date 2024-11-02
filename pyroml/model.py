@@ -74,15 +74,21 @@ class PyroModel(WithHyperParameters, Callback, nn.Module):
         self.trainer = trainer
 
     def configure_optimizers(self):
+        """
+        Define optimizer and optionally scheduler to use during training
+        Trainer class can be accessed using self.trainer
+
+        Example:
+        ```
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=self.trainer.lr)
+        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=1, gamma=0.1)
+        ```
+
+        Default optimizer is SGD with learning rate from trainer.lr
+        Default scheduler is None, meaning the learning rate will be constant
+        """
         tr = self.trainer
-
-        self.optimizer: Optimizer = tr.optimizer(
-            self.parameters(), lr=tr.lr, **tr.optimizer_params
-        )
-
-        self.scheduler: Scheduler | None = None
-        if tr.scheduler is not None:
-            self.scheduler = tr.scheduler(self.optimizer, **tr.scheduler_params)
+        self.optimizer: Optimizer = torch.optim.SGD(self.parameters(), lr=tr.lr)
 
     def _compute_loss(self, output: StepOutput) -> torch.Tensor:
         if Step.PRED not in output:

@@ -42,13 +42,13 @@ class Wandb(Callback):
         self._log(loop=loop, metrics=metrics)
 
     def on_train_epoch_end(self, **kwargs: "p.CallbackKwargs"):
-        self._on_epoch_end(*kwargs)
+        self._on_epoch_end(**kwargs)
 
     def on_validation_end(self, **kwargs: "p.CallbackKwargs"):
-        self._on_epoch_end(*kwargs)
+        self._on_epoch_end(**kwargs)
 
     def on_test_end(self, **kwargs: "p.CallbackKwargs"):
-        self._on_epoch_end(*kwargs)
+        self._on_epoch_end(**kwargs)
 
     def _get_attr_names(self):
         m = self.loop.model

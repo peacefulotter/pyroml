@@ -20,7 +20,7 @@ class Loop(Callback):
         self.model = model
 
         self.status = Status(loop=self)
-        self.progress = ProgressBar(loop=self)
+        self.progress = ProgressBar()
         self.tracker = MetricsTracker(loop=self)
 
         # Callbacks, in order of execution
@@ -56,7 +56,7 @@ class Loop(Callback):
             if not callable(fn):
                 continue
             log.debug(f"Triggering callback {_hook_name} for {cb} with args {kwargs}")
-            fn(self.trainer, self, **kwargs)
+            fn(**kwargs)
 
     @property
     def stage(self) -> "p.Stage":

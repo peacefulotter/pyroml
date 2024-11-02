@@ -1,18 +1,30 @@
 import torch
-import logging
-import warnings
 import numpy as np
 import pandas as pd
 
+from typing import Callable
 from torchmetrics import Metric
+from torchmetrics.aggregation import MeanMetric
 
 import pyroml as p
-from pyroml.model import PyroModel, Step
+from pyroml.model import Step
 from pyroml.callback import Callback
 
-from .loss import LossMetric
 
 log = p.get_logger(__name__)
+
+
+EPOCH_PREFIX = "epoch"
+
+
+class LossMetric(MeanMetric):
+    def __init__(self, loop: "p.Loop"):
+        super().__init__()
+        self.loss_fn = loop.trainer.loss
+
+    def update(self, pred, target):
+        loss = self.loss_fn(pred, target)
+        super().update(loss)
 
 
 class MissingStepKeyException(Exception):
@@ -27,9 +39,11 @@ class MetricsTracker(Callback):
         self.model = loop.model
         self.status = loop.status
 
+        # Metrics setup
         self.metrics = self.model.configure_metrics()
         self.metrics: dict[str, Metric] = self._format_metrics(self.metrics)
-        self.metrics["loss"] = LossMetric(loop=loop)
+        if "loss" not in self.metrics:
+            self.metrics["loss"] = LossMetric(loop)
 
         self.records = pd.DataFrame([], columns=["stage", "epoch", "step"])
 
@@ -95,9 +109,9 @@ class MetricsTracker(Callback):
     def _register_step_metrics(self, output: "p.StepOutput") -> dict[str, float]:
         out_metric, out_target = self._extract_output(output)
 
-        def metric_cb(m: Metric):
+        def metric_cb(m: Metric) -> float:
             if isinstance(m, LossMetric):
-                return m(output[Step.PRED], output[Step.TARGET], output=output)
+                return m(output[Step.PRED], output[Step.TARGET])
             return m(out_metric, out_target)
 
         step_metrics = self._register_metrics(metric_cb=metric_cb)
@@ -122,11 +136,9 @@ class MetricsTracker(Callback):
             return
 
         def prefix_cb(name: str):
-            return f"epoch_{name}"
+            return f"{EPOCH_PREFIX}_{name}"
 
-        def metric_cb(m: Metric):
-            return m.compute()
-
+        metric_cb: Callable[[Metric], float] = lambda m: m.compute()
         self.current_epoch_metrics = self._register_metrics(
             prefix_cb=prefix_cb, metric_cb=metric_cb
         )
