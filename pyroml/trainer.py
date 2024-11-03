@@ -172,7 +172,7 @@ class Trainer(WithHyperParameters):
 
         # Logging
         self.wandb = wandb
-        self.wandb_project = self._get_wandb_project(wandb_project)
+        self.wandb_project = self._get_wandb_project(wandb, wandb_project)
         self.log_level = log_level
         set_level_all_loggers(level=self.log_level)
 
@@ -191,15 +191,16 @@ class Trainer(WithHyperParameters):
         # Context manager for mixed precision training and moving to device - On cpu, only bfloat16 is supported
         self.autocast = Autocast(self)
 
-    def _get_wandb_project(self, wandb_project: str | None):
-        project = wandb_project or os.environ["WANDB_PROJECT"]
-        if project == "" or project is None:
+    def _get_wandb_project(self, wandb: bool, wandb_project: str | None):
+        project = wandb_project or os.environ.get("WANDB_PROJECT")
+        if wandb and (project == "" or project is None):
             raise ValueError(
                 "Wandb project name is required, please set WANDB_PROJECT in your environment variables or pass wandb_project in the Trainer constructor"
             )
         return project
 
     def _fetch_version(self):
+        os.makedirs(self.checkpoint_folder, exist_ok=True)
         for f in os.scandir(self.checkpoint_folder):
             if not f.is_dir() or not re.match(r"v_(\d+)", f.name):
                 continue

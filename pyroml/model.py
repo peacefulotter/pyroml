@@ -7,7 +7,6 @@ import safetensors.torch as st
 from enum import Enum
 from pathlib import Path
 from typing import TypeAlias
-from torch.optim import Adam
 from torchmetrics import Metric
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler as Scheduler

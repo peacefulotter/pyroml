@@ -1,17 +1,6 @@
-### FIXME:
-
-- !!! compile breaks safetensor load_model, see: https://github.com/huggingface/transformers/issues/25205
-
 ### TODO:
 
-- seed
 - add docs
-- Move most of the Trainer **init** code to the run method, to allow modifying ALL configs between runs
-- use ctx:
-  - ````py
-    ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=torch.bfloat16)
-    ```og
-    ````
 - use DistributeDataParallel:
   - ````py
     with ctx:
