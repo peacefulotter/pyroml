@@ -163,3 +163,5 @@ checkpoints/
 wandb/
 tests/*data*/
 tests/*.st
+**/iris-data/
+temp.ipynb

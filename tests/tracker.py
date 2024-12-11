@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 
 import pyroml as p
 from pyroml.utils import Stage
-from pyroml.metrics.tracker import MetricsTracker
+from pyroml.metrics.tracker import MetricTracker
 
 from setup import setup_test
 from dummy.classification import DummyClassificationModel, DummyClassificationDataset
@@ -23,12 +23,12 @@ if __name__ == "__main__":
 
     trainer = p.Trainer()
     loop = p.TestLoop(trainer, model)
-    tracker = MetricsTracker(loop)
+    tracker = MetricTracker(loop)
 
     def step(stage: Stage, epoch: int, step: int):
         batch = next(loader)
         out = model.step(batch, stage)
-        tracker.update(output=out)
+        tracker.step(output=out)
         loop.status.advance_step()
 
     epochs = 3

@@ -13,7 +13,7 @@ from pyroml.model import PyroModel, Step
 
 class IrisNet(PyroModel):
     def __init__(self, mid_dim=16):
-        super(IrisNet, self).__init__()
+        super().__init__()
         self.module = nn.Sequential(
             nn.Linear(4, mid_dim),
             nn.ReLU(),
@@ -37,14 +37,14 @@ class IrisNet(PyroModel):
         x, y = data
         preds: torch.Tensor = self(x)
 
-        metric_preds = preds.argmax(dim=1)
-        metric_target = y.argmax(dim=1)
+        # metric_preds = preds.argmax(dim=1)
+        # metric_target = y.argmax(dim=1)
 
         return {
             Step.PRED: preds,
             Step.TARGET: y,
-            Step.METRIC_PRED: metric_preds,
-            Step.METRIC_TARGET: metric_target,
+            # Step.METRIC_PRED: metric_preds,
+            # Step.METRIC_TARGET: metric_target,
         }
 
 

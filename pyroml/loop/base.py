@@ -9,7 +9,7 @@ from pyroml.callback import Callback
 from pyroml.loop.status import Status
 from pyroml.loop.autocast import Autocast
 from pyroml.loop.progress_bar import ProgressBar
-from pyroml.metrics.tracker import MetricsTracker
+from pyroml.metrics.tracker import MetricTracker
 
 log = p.get_logger(__name__)
 
@@ -21,7 +21,7 @@ class Loop(Callback):
 
         self.status = Status(loop=self)
         self.progress = ProgressBar()
-        self.tracker = MetricsTracker(loop=self)
+        self.tracker = MetricTracker(loop=self)
 
         # Callbacks, in order of execution
         self.callbacks = [self]
@@ -122,7 +122,7 @@ class Loop(Callback):
         self._trigger_callback("epoch_start")
 
         if self.model.device != self.autocast.device:
-            self.model = self.model.to(self.autocast.device)
+            self.model.to(self.autocast.device)
 
         # progress bar context must not be opened twice (e.g. by train and val loop)
         with self.progress.bar if self.stage != Stage.VAL else nullcontext():
@@ -159,7 +159,7 @@ class Loop(Callback):
                     self.after_step(output)
 
                 # ----- Compute batch and epoch metrics
-                self.tracker.update(output=output)
+                self.tracker.step(output=output)
 
                 self._trigger_callback("iter_end")
                 self.status.advance_step()
@@ -168,4 +168,4 @@ class Loop(Callback):
         self._trigger_callback("end")
 
         if self.stage != Stage.VAL:
-            self.model = self.model.cpu()
+            self.model.cpu()

@@ -25,3 +25,7 @@ class Status:
 
     def advance_epoch(self):
         self.epoch += 1
+
+    def reset(self):
+        self.epoch = 0
+        self.step = 0

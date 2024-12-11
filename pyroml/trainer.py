@@ -44,6 +44,7 @@ class Trainer(WithHyperParameters):
         dtype: torch.dtype = torch.float32,
         compile: bool = True,
         checkpoint_folder: str | Path = "./checkpoints",
+        hparams_file: str | Path = Checkpoint.TRAINER_HPARAMS.value,
         batch_size: int = 16,
         eval_batch_size: int = None,
         num_workers: int = 4,
@@ -105,6 +106,10 @@ class Trainer(WithHyperParameters):
                 Folder to save checkpoints.
                 Defaults to "./checkpoints".
 
+            hparams_file (str, optional):
+                File to save hyperparameters.
+                Defaults to Checkpoint.TRAINER_HPARAMS.value.
+
             batch_size (int, optional):
                 Training batch size. If eval_batch_size is None, evaluation batches will use this value
                 Defaults to 16.
@@ -140,7 +145,7 @@ class Trainer(WithHyperParameters):
         Returns:
             Config: Configuration object with the specified hyperparameters.
         """
-        super().__init__(hparams_file=Checkpoint.TRAINER_HPARAMS.value)
+        super().__init__(hparams_file=hparams_file)
 
         eval_batch_size = eval_batch_size or batch_size
 
@@ -150,6 +155,7 @@ class Trainer(WithHyperParameters):
         self.max_epochs = max_epochs
         self.max_steps = max_steps
         self.grad_norm_clip = grad_norm_clip
+        self.callbacks = callbacks
 
         # Validation
         self.evaluate = evaluate
@@ -162,7 +168,7 @@ class Trainer(WithHyperParameters):
         self.compile = compile
         self.version = 0
         self.checkpoint_folder = Path(checkpoint_folder)
-        self._fetch_version()
+        self.model: "p.PyroModel" | torch._dynamo.OptimizedModule = None
 
         # Data
         self.batch_size = batch_size
@@ -174,22 +180,8 @@ class Trainer(WithHyperParameters):
         self.wandb = wandb
         self.wandb_project = self._get_wandb_project(wandb, wandb_project)
         self.log_level = log_level
-        set_level_all_loggers(level=self.log_level)
 
-        # Miscs
-        self.date = get_date()
-
-        print("TODO: TRAINER SAVE HPARAMS")
-
-        # Callbacks
-        self.callbacks = callbacks
-
-        self.model: "p.PyroModel" | torch._dynamo.OptimizedModule = None
-
-        initialize_logging()
-
-        # Context manager for mixed precision training and moving to device - On cpu, only bfloat16 is supported
-        self.autocast = Autocast(self)
+        self._setup()
 
     def _get_wandb_project(self, wandb: bool, wandb_project: str | None):
         project = wandb_project or os.environ.get("WANDB_PROJECT")
@@ -217,6 +209,13 @@ class Trainer(WithHyperParameters):
             return self.max_epochs * len(dataset) // self.batch_size
         raise ValueError("Trainer max_steps or max_epochs must be defined")
 
+    def _setup(self):
+        self.autocast = Autocast(self)
+        self.date = get_date()
+        initialize_logging()
+        set_level_all_loggers(level=self.log_level)
+        self._fetch_version()
+
     def _setup_model(self, model: "p.PyroModel", dataset: Dataset):
         self.model = model
 
@@ -229,23 +228,28 @@ class Trainer(WithHyperParameters):
     def _call_loop(
         self, Loop: "p.Loop", model: "p.PyroModel", dataset: Dataset, **kwargs
     ) -> pd.DataFrame:
+        """ "
+        Setups the trainer and model and
+        Calls a loop with the specified model and dataset.
+        """
         if not isinstance(model, p.PyroModel) and (
             not isinstance(model, torch._dynamo.OptimizedModule)
             or not isinstance(model._orig_mod, p.PyroModel)
         ):
             raise WrongModuleException("Trainer loop model must be a PyroModel")
 
+        self._setup()
         self._setup_model(model, dataset)
         loop: "p.Loop" = Loop(model=model, trainer=self, **kwargs)
         loop.run(dataset)
-        return loop.tracker.records
+        return loop.tracker
 
     def fit(
         self, model: "p.PyroModel", tr_dataset: Dataset, ev_dataset: Dataset = None
-    ) -> pd.DataFrame:
+    ) -> "p.MetricTracker":
         return self._call_loop(TrainLoop, model, tr_dataset, ev_dataset=ev_dataset)
 
-    def test(self, model: "p.PyroModel", dataset: Dataset) -> pd.DataFrame:
+    def test(self, model: "p.PyroModel", dataset: Dataset) -> "p.MetricTracker":
         return self._call_loop(TestLoop, model, dataset)
 
     def save_state(
