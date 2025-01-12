@@ -16,3 +16,4 @@ extra_args = dict(fused=True) if use_fused else dict()
 optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)
 ```
 - amp GradScaler for float16
+- delete checkpoint folder if error and nothing stored in it   
