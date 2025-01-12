@@ -12,7 +12,7 @@
 
 ## Requirements
 
--   Python 3.10 or newer
+-   Python 3.10 : 3.12
 
 ## Installation
 
@@ -23,13 +23,10 @@ pip install pyroml
 ### Locally
 
 ```shell
-$ git clone https://github.com/peacefulotter/pyroml.git
-$ cd pyroml
-$ sudo apt install python3.10-venv # check you python version and change it here if !=
-$ sudo apt install python3-virtualenv
-$ python3 -m venv venv
-$ source ./venv/bin/activate
-$ pip install -r requirements.txt
+git clone https://github.com/peacefulotter/pyroml.git
+cd pyroml
+
+poetry config virtualenvs.in-project true
 ```
 
 ### Running tests
