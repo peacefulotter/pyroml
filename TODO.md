@@ -8,3 +8,11 @@
             outputs = model(x, targets=y)```
     ````
 - add time per iteration, time per epoch, more?
+- fused adam ?
+```py
+fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters
+use_fused = fused_available and device_type == 'cuda'
+extra_args = dict(fused=True) if use_fused else dict()
+optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)
+```
+- amp GradScaler for float16
