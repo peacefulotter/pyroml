@@ -16,6 +16,13 @@ log = p.get_logger(__name__)
 EPOCH_PREFIX = "epoch"
 
 
+class MissingStepKeyWarning(Warning):
+    pass
+
+
+warnings.simplefilter("once", MissingStepKeyWarning)
+
+
 class LossMetric(MeanMetric):
     maximize = False
     higher_is_better = False
@@ -106,8 +113,8 @@ class MetricTracker(_MetricTracker, Callback):
             if metric_key in output:
                 return output[metric_key]
             elif metric_key not in output and key in output:
-                msg = f"No metric in output, using {key} instead\nIf your model is used for classification, you likely want to output a {metric_key} key as well."
-                warnings.warn(msg)
+                msg = f"No metric key {metric_key} in output, using {key} instead\nIf your model is used for classification, you likely want to output a {metric_key} key as well."
+                warnings.warn(msg, MissingStepKeyWarning)
                 return output[key]
             msg = f"No {metric_key} or {key} key in model.step output, your model should at least return a tensor associated with the {key} or {metric_key} key"
             raise MissingStepKeyException(msg)
