@@ -9,5 +9,9 @@ from pyroml.checkpoint import *
 from pyroml.wandb_logger import *
 from pyroml.metrics.tracker import *
 
+import warnings
+
+warnings.simplefilter("once")
+
 __version__ = "0.0.14"
 __author__ = "Nathan Maire"

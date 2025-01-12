@@ -60,7 +60,7 @@ class PyroModel(WithHyperParameters, Callback, nn.Module):
 
     def configure_metrics(
         self,
-    ) -> dict[Metric] | None:
+    ) -> dict[str, Metric] | None:
         pass
 
     def compile(self, *args, **kwargs):

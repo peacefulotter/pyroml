@@ -20,7 +20,6 @@ class IrisNet(PyroModel):
             nn.Linear(mid_dim, mid_dim),
             nn.ReLU(),
             nn.Linear(mid_dim, 3),
-            nn.Softmax(dim=1),
         )
 
     def configure_metrics(self):
@@ -37,13 +36,13 @@ class IrisNet(PyroModel):
         x, y = data
         preds: torch.Tensor = self(x)
 
-        # metric_preds = preds.argmax(dim=1)
+        metric_preds = torch.softmax(preds, dim=1)  # preds.argmax(dim=1)
         # metric_target = y.argmax(dim=1)
 
         return {
             Step.PRED: preds,
             Step.TARGET: y,
-            # Step.METRIC_PRED: metric_preds,
+            Step.METRIC_PRED: metric_preds,
             # Step.METRIC_TARGET: metric_target,
         }
 
@@ -69,14 +68,15 @@ class IrisDataset(Dataset):
 
     def __getitem__(self, idx):
         x = self.x[idx].float()
-        y = (
-            F.one_hot(
-                self.y[idx],
-                num_classes=3,
-            )
-            .squeeze()
-            .float()
-        )
+        y = self.y[idx].squeeze().long()
+        # y = (
+        #     F.one_hot(
+        #         self.y[idx],
+        #         num_classes=3,
+        #     )
+        #     .squeeze()
+        #     .float()
+        # )
         return x, y
 
 

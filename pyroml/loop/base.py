@@ -19,9 +19,11 @@ class Loop(Callback):
         self.trainer = trainer
         self.model = model
 
-        self.status = Status(loop=self)
+        self.status = Status(stage=self.stage)
         self.progress = ProgressBar()
-        self.tracker = MetricTracker(loop=self)
+        self.tracker = MetricTracker(
+            status=self.status, model=model, loss_fn=trainer.loss
+        )
 
         # Callbacks, in order of execution
         self.callbacks = [self]

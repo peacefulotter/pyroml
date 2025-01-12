@@ -1,4 +1,5 @@
 import torch
+import warnings
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -16,9 +17,12 @@ EPOCH_PREFIX = "epoch"
 
 
 class LossMetric(MeanMetric):
-    def __init__(self, loop: "p.Loop"):
+    maximize = False
+    higher_is_better = False
+
+    def __init__(self, loss_fn: torch.nn.Module):
         super().__init__()
-        self.loss_fn = loop.trainer.loss
+        self.loss_fn = loss_fn
 
     def update(self, pred, target):
         loss = self.loss_fn(pred, target)
@@ -29,14 +33,18 @@ class MissingStepKeyException(Exception):
     pass
 
 
-class Metrics(MetricCollection):
+class PyroMetrics(Metric):
+    def __init__(self, model: "p.PyroModel", loss_fn=torch.nn.Module):
+        super().__init__()
 
-    def __init__(self, loop: "p.Loop"):
-        metrics = loop.model.configure_metrics()
+        metrics = model.configure_metrics()
         metrics = self._format_metrics(metrics)
 
-        super().__init__(metrics)
-        self.loss = LossMetric(loop)
+        self.metrics = MetricCollection(metrics)
+        self.loss = LossMetric(loss_fn=loss_fn)
+        self.maximize = [
+            m.higher_is_better for m in [*self.metrics.values(), self.loss]
+        ]
 
     def _format_metrics(self, metrics: dict[Metric] | None) -> dict[str, Metric]:
         if metrics is None:
@@ -47,31 +55,33 @@ class Metrics(MetricCollection):
             "The return type of the model.configure_metrics function should be a dict[torchmetrics.Metric], or None"
         )
 
-    def update(self, pred, target):
+    def update(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        metric_pred: torch.Tensor,
+        metric_target: torch.Tensor,
+    ):
         self.loss.update(pred, target)
-        super().update(pred, target)
+        self.metrics.update(metric_pred, metric_target)
 
     def compute(self):
         loss_val = self.loss.compute()
-        metric_vals = super().compute()
+        metric_vals = self.metrics.compute()
         return {**metric_vals, "loss": loss_val}
 
 
 class MetricTracker(_MetricTracker, Callback):
-
-    NO_NA_COLUMNS = ["stage", "epoch", "step"]
-
-    def __init__(self, loop: "p.Loop"):
-        super().__init__(Metrics(loop))
-
-        self.status = loop.status
-
+    def __init__(
+        self, status: "p.Status", model: "p.PyroModel", loss_fn: torch.nn.Module
+    ):
+        super().__init__(PyroMetrics(model=model, loss_fn=loss_fn))
+        self.global_status = status
         self.records = pd.DataFrame([], columns=["stage", "epoch", "step"])
-
         self.current_step_metrics: dict[str, float] = {}
         self.current_epoch_metrics: dict[str, float] = {}
 
-    def _detach(self, x):
+    def _detach(self, x) -> float | np.ndarray:
         if isinstance(x, torch.Tensor):
             if len(x.shape) == 0:
                 return x.item()
@@ -80,23 +90,32 @@ class MetricTracker(_MetricTracker, Callback):
         return x
 
     def _extract_output(self, output: "p.StepOutput"):
-        def __check(key: Step, metric_key: Step):
-            out = None
+        def get_val(key: Step):
+            if key in output:
+                return output[key]
+            msg = f"No {key} key in model.step output, your model should return a tensor associated with the {key} key"
+            raise MissingStepKeyException(msg)
+
+        out_pred = get_val(Step.PRED)
+        out_target = get_val(Step.TARGET)
+
+        return out_pred, out_target
+
+    def _extract_metrics_output(self, output: "p.StepOutput"):
+        def get_val(key: Step, metric_key: Step):
             if metric_key in output:
-                out = output[metric_key]
+                return output[metric_key]
             elif metric_key not in output and key in output:
                 msg = f"No metric in output, using {key} instead\nIf your model is used for classification, you likely want to output a {metric_key} key as well."
-                # TODO: log this only once, on my machine it logs multiple times warnings.warn(msg, stacklevel=2)
-                out = output[key]
-            else:
-                msg = f"No {metric_key} or {key} key in model.step output, your model should at least return a tensor associated with the {key} or {metric_key} key"
-                raise MissingStepKeyException(msg)
-            return out
+                warnings.warn(msg)
+                return output[key]
+            msg = f"No {metric_key} or {key} key in model.step output, your model should at least return a tensor associated with the {key} or {metric_key} key"
+            raise MissingStepKeyException(msg)
 
-        out_metric = __check(Step.PRED, Step.METRIC_PRED)
-        out_target = __check(Step.TARGET, Step.METRIC_TARGET)
+        out_pred = get_val(Step.PRED, Step.METRIC_PRED)
+        out_target = get_val(Step.TARGET, Step.METRIC_TARGET)
 
-        return out_metric, out_target
+        return out_pred, out_target
 
     def _register_metrics(
         self,
@@ -106,13 +125,14 @@ class MetricTracker(_MetricTracker, Callback):
             if col not in self.records.columns:
                 self.records[col] = np.nan
         metrics = {k: self._detach(v) for k, v in metrics.items()}
-        for k, v in self.status.to_dict().items():
+        for k, v in self.global_status.to_dict().items():
             metrics[k] = v
         self.records.loc[len(self.records)] = metrics
 
     def forward(self, output: "p.StepOutput"):
-        out_metric, out_target = self._extract_output(output)
-        step_metrics = super().forward(out_metric, out_target)
+        pred, tgt = self._extract_output(output)
+        metric_pred, metric_tgt = self._extract_metrics_output(output)
+        step_metrics = super().forward(pred, tgt, metric_pred, metric_tgt)
         self._register_metrics(step_metrics)
         return step_metrics
 
@@ -140,9 +160,9 @@ class MetricTracker(_MetricTracker, Callback):
     def _on_epoch_end(self, **kwargs: "p.CallbackKwargs"):
         # Since an EvalLoop is created inside a TrainLoop
         # we need to check if the current loop is the same as the one that created the tracker
-        # otherwise the this method will be called twice
-        loop = kwargs["loop"]
-        if self.status != loop.status:
+        # otherwise this method will be called twice
+        loop: "p.Loop" = kwargs["loop"]
+        if self.global_status != loop.status:
             return
 
         def prefix_cb(name: str):
@@ -188,15 +208,63 @@ class MetricTracker(_MetricTracker, Callback):
     def step(self, output: "p.StepOutput") -> dict[str, float]:
         self._register_step_metrics(output)
 
-    def plot(self, axs=None):
-        raise NotImplementedError("This method is not implemented yet")
-        ncols = len(self.metrics)
-        _, axs = (
-            (_, axs)
-            if axs is not None
-            else plt.subplots(nrows=1, ncols=ncols, figsize=(ncols * 5, 5))
+    def _get_metrics_keys(self):
+        m: PyroMetrics = self._base_metric
+        return m.metrics.keys()
+
+    def plot(
+        self,
+        stage: "p.Stage" = None,
+        plot_keys: list[str] = None,
+        epoch: bool = False,
+        kind: str = "line",
+    ):
+        stage = stage or self.global_status.stage
+        plot_keys = self._get_metrics_keys() if plot_keys is None else plot_keys
+        prefix = EPOCH_PREFIX + "_" if epoch else ""
+        plot_keys = [prefix + k for k in plot_keys]
+        loss_key = prefix + "loss"
+        x_key = "epoch" if epoch else "step"
+
+        records = self.records
+        records = records[records["stage"] == stage.value]
+
+        fig, ax = plt.subplots()
+
+        # For some plot kinds, we need to group everything otherwise metrics overlap the loss..
+        # This is not ideal as it means loss and metrics share the y axis..
+        if kind == "bar" or kind == "barh":
+            records = records[[x_key, loss_key, *plot_keys]].dropna()
+            records.plot(x=x_key, ax=ax, legend=False, kind=kind)
+
+        # For other kinds, such as e.g. line, loss and metrics shouldn't share the same y axis
+        else:
+            # Plot the loss on the first axis
+            ax.set_ylabel("Loss")
+            loss_records = records[[x_key, loss_key]].dropna()
+            loss_records.plot(x=x_key, ax=ax, legend=False, kind=kind)
+
+            if len(plot_keys) > 0:
+                # Create a separate axis for metrics plot
+                ax2 = ax.twinx()
+                ax2.set_ylabel("Metrics")
+
+                # Second axis matches the first axis color cycle
+                ax2._get_lines = ax._get_lines
+                ax2._get_patches_for_fill = ax._get_patches_for_fill
+
+                # Plot metrics on the secondary axis
+                metrics_records = records[[x_key, *plot_keys]].dropna()
+                metrics_records.plot(x=x_key, ax=ax2, legend=False, kind=kind)
+
+        ax.set_title(stage.value)
+        fig.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.05),
+            ncol=5,
+            fancybox=True,
+            shadow=True,
         )
-        for metric, ax in zip(self.metrics.values(), axs.flatten()):
-            metric.plot(ax=ax)
+
         plt.tight_layout()
         plt.show()

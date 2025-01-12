@@ -4,14 +4,10 @@ import pyroml as p
 
 
 class Status:
-    def __init__(self, loop: "p.Loop"):
-        self.loop = loop
+    def __init__(self, stage: "p.Stage"):
+        self.stage = stage
         self.epoch = 0
         self.step = 0
-
-    @property
-    def stage(self):
-        return self.loop.stage
 
     def to_dict(self) -> dict[str, Any]:
         return dict(

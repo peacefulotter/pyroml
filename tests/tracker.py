@@ -23,7 +23,7 @@ if __name__ == "__main__":
 
     trainer = p.Trainer()
     loop = p.TestLoop(trainer, model)
-    tracker = MetricTracker(loop)
+    tracker = MetricTracker(loop.status, model, trainer.loss)
 
     def step(stage: Stage, epoch: int, step: int):
         batch = next(loader)
