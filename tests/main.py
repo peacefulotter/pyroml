@@ -1,40 +1,39 @@
 import sys
+import torch
 
 sys.path.append("..")
 
-from dummy import DummyDataset, DummyModel
-from src.config import Config
-from src.trainer import Trainer
-from src.metrics import Accuracy, RMSE
+from dummy.regression import DummyRegressionDataset, DummyRegressionModel
+from pyroml.trainer import Trainer
 
 if __name__ == "__main__":
-    tr_ds = DummyDataset()
-    ev_ds = DummyDataset(size=128)
-    model = DummyModel()
+    tr_ds = DummyRegressionDataset(size=256)
+    ev_ds = DummyRegressionDataset(size=64)
+    te_ds = DummyRegressionDataset(size=64)
+    model = DummyRegressionModel()
 
     # Test dataset works with model
     x, y = tr_ds[0]
     output = model(x)
     assert output.shape == y.shape
 
-    def on_epoch_end(trainer, **kwargs):
-        pass
-        # trainer.save_model()
-
+    lr = 1e-2
     max_iterations = 256
-    config = Config(
-        name="pyro_main_test_v2",
-        max_iterations=max_iterations,
-        dropout=0,
-        lr=1e-2,
-        batch_size=64,
-        metrics=[Accuracy, RMSE],
+    trainer = Trainer(
+        lr=lr,
+        dtype=torch.bfloat16,
+        max_steps=max_iterations,
+        batch_size=16,
         grad_norm_clip=None,
-        wandb_project="pyro_main_test",
-        evaluate_every=10,
-        verbose=False,
-        wandb=True,
+        wandb_project="pyro_test",
+        evaluate=True,
+        evaluate_every=4,
+        wandb=False,
+        compile=False,
+        num_workers=0,
     )
-    trainer = Trainer(model, config)
-    trainer.add_callback("on_epoch_end", on_epoch_end)
-    trainer.run(tr_ds, ev_ds)
+    metrics = trainer.fit(model=model, tr_dataset=tr_ds, ev_dataset=ev_ds)
+    print(metrics)
+
+    metrics = trainer.test(model=model, dataset=te_ds)
+    print(metrics)

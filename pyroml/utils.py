@@ -1,5 +1,20 @@
+import os
+import time
 import torch
-from collections import defaultdict
+import random
+import logging
+import numpy as np
+import torch.nn as nn
+
+from enum import Enum
+
+import pyroml as p
+
+log = p.get_logger(__name__)
+
+
+def get_classname(obj):
+    return obj.__class__.__name__
 
 
 def to_device(obj, device):
@@ -16,34 +31,51 @@ def to_device(obj, device):
     return obj
 
 
-def get_lr(config, scheduler):
-    if scheduler == None:
-        return config.lr
-    return float(scheduler.get_last_lr()[0])
+def get_date():
+    return time.strftime("%Y-%m-%d_%H:%M", time.gmtime(time.time()))
 
 
-class Record:
-    def __init__(self, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+# https://github.com/huggingface/transformers/blob/main/src/transformers/modeling_utils.py#L4788C1-L4799C21
+def unwrap_model(model: nn.Module) -> nn.Module:
+    """
+    Recursively unwraps a model from potential containers (as used in distributed training).
 
-    def __str__(self):
-        return f"Config({str(self.__dict__)[1:-1]})"
+    Args:
+        model (`torch.nn.Module`): The model to unwrap.
+    """
+    # since there could be multiple levels of wrapping, unwrap recursively
+    if hasattr(model, "module"):
+        return unwrap_model(model.module)
+    else:
+        return model
 
-    def __repr__(self):
-        return self.__str__()
+
+class Stage(Enum):
+    TRAIN = "train"
+    VAL = "validation"
+    TEST = "test"
+
+    def to_prefix(self):
+        return {
+            Stage.TRAIN: "tr",
+            Stage.VAL: "ev",
+            Stage.TEST: "te",
+        }[self]
 
 
-class Callbacks:
-    def __init__(self):
-        self.callbacks = defaultdict(list)
+def seed_everything(seed):
+    log.info(f"Global seed set to {seed}")
+    os.environ["PL_GLOBAL_SEED"] = str(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
-    def add_callback(self, onevent: str, callback):
-        self.callbacks[onevent].append(callback)
 
-    def set_callback(self, onevent: str, callback):
-        self.callbacks[onevent] = [callback]
+class Singleton(type):
+    _instances = {}
 
-    def trigger_callbacks(self, onevent: str, **kwargs):
-        for callback in self.callbacks.get(onevent, []):
-            callback(self, **kwargs)
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        return cls._instances[cls]
