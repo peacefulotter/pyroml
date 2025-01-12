@@ -21,10 +21,13 @@ pip install pyroml
 ### Locally
 
 ```shell
+# Clone the repo
 git clone https://github.com/peacefulotter/pyroml.git
 cd pyroml
 
-poetry config virtualenvs.in-project true
+# Install dependencies
+poetry config virtualenvs.in-project true # Optional, easier for vscode to find the venv folder
+poetry install
 ```
 
 ### Running tests
