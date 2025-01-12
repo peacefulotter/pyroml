@@ -5,6 +5,7 @@ from rich.logging import RichHandler
 
 def initialize_logging():
     logging.basicConfig()
+    logging.captureWarnings(True)
     logging.root.setLevel(logging.WARNING)
     logging.basicConfig(
         level=logging.WARNING, handlers=[RichHandler(level=logging.WARNING)]

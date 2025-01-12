@@ -1,6 +1,6 @@
 [project]
 name = "pyroml"
-version = "0.0.14"
+version = "1.0.0"
 description = "Machine Learning framework allowing plug-and-play training for pytorch models"
 authors = [{ name = "Nathan" }]
 readme = "README.md"
@@ -41,4 +41,3 @@ torchvision = { source = "pytorch_cpu" }
 
 [tool.poetry.group.dev.dependencies]
 ipywidgets = "^8.1.5"
-
