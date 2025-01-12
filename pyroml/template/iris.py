@@ -80,19 +80,18 @@ class IrisDataset(Dataset):
         return x, y
 
 
-def load_dataset():
+def load_dataset(folder="iris-data") -> datasets.arrow_dataset.Dataset:
     species = ["Iris-setosa", "Iris-versicolor", "Iris-virginica"]
 
     def map_species(x):
         x["Species"] = species.index(x["Species"])
         return x
 
-    IRIS_DATA_FOLDER = "iris-data"
-    if os.path.isdir(IRIS_DATA_FOLDER):
-        ds = datasets.load_from_disk(IRIS_DATA_FOLDER)
+    if os.path.isdir(folder):
+        ds = datasets.load_from_disk(folder)
     else:
         ds = datasets.load_dataset("scikit-learn/iris", split="train")
-        ds.save_to_disk(IRIS_DATA_FOLDER)
+        ds.save_to_disk(folder)
 
     ds = ds.map(map_species)
     ds = ds.with_format("torch")

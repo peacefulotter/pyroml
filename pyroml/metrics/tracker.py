@@ -112,7 +112,6 @@ class MetricTracker(_MetricTracker, Callback):
 
     def forward(self, output: "p.StepOutput"):
         out_metric, out_target = self._extract_output(output)
-        print(self, super())
         step_metrics = super().forward(out_metric, out_target)
         self._register_metrics(step_metrics)
         return step_metrics

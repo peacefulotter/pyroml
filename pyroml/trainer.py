@@ -8,8 +8,6 @@ import torch.nn as nn
 
 from pathlib import Path
 from torch.utils.data import Dataset
-from torch.optim.optimizer import Optimizer
-from torch.optim.lr_scheduler import LRScheduler as Scheduler
 
 
 import pyroml as p
@@ -63,7 +61,7 @@ class Trainer(WithHyperParameters):
                 Defaults to MSELoss.
 
             lr (float, optional):
-                Learning rate.
+                Learning rate to use for your optimizer / scheduler
                 Defaults to 1e-4.
 
             max_epochs (int, > 0, optional):

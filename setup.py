@@ -8,12 +8,11 @@ setup(
     name="pyroml",
     version="0.0.14",
     author="Nathan Maire",
-    author_email="nathan.maire@epfl.ch",
     description="Machine Learning framework allowing plug-and-play training for pytorch models",
     long_description=long_description,
     long_description_content_type="text/markdown",
     license="MIT",
     packages=find_packages(where=".", exclude=["tests"]),
     url="https://github.com/peacefulotter/pyroml",
-    install_requires=["torch", "pandas", "numpy", "wandb", "safetensors", "rich"],
+    install_requires=["torch", "pandas", "numpy", "safetensors", "rich"],
 )
