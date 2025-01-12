@@ -3,8 +3,8 @@
 <b style='font-size:16px'>Lightweight Machine Learning framework allowing plug-and-play training for Pytorch models</b>
 
 -   ⚡ <b>Lightning</b> inspired
--   💾 Support for <b>wandb</b> and <b>checkpoints</b> out of the box
--   📊 Pretty <b>logs</b> and out-of-the-box <b>metrics</b> support
+-   💾 Support for <b>wandb</b> and <b>checkpoints</b> out-of-the-box
+-   📊 Pretty <b>logs</b>, <b>plots</b> and support for <b>metrics</b>
 -   ✨ Fully <b>type-safe</b>
 -   🪶 Lightweight and <b>easy to use</b>
 
