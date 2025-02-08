@@ -1,7 +1,8 @@
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable, Dict, Tuple, Type, Union
 
 import torch
-from torch.utils.data import Dataset, default_collate
+import torch.utils.data._utils.collate
+from torch.utils.data import Dataset
 
 from pyroml.core.stage import Stage
 from pyroml.loop.eval import EvalLoop
@@ -9,6 +10,24 @@ from pyroml.loop.eval import EvalLoop
 if TYPE_CHECKING:
     from pyroml.core.model import PyroModel
     from pyroml.core.trainer import Trainer
+
+
+def custom_collate_tensor_fn(batch, *, collate_fn_map):
+    try:
+        return torch.stack(batch, 0)
+    except Exception:
+        return torch.cat(batch, 0)
+
+
+custom_collate_fn_map: Dict[Union[Type, Tuple[Type, ...]], Callable] = {
+    torch.Tensor: custom_collate_tensor_fn
+}
+
+
+def custom_collate(batch):
+    return torch.utils.data._utils.collate.collate(
+        batch, collate_fn_map=custom_collate_fn_map
+    )
 
 
 class PredictLoop(EvalLoop):
@@ -31,5 +50,5 @@ class PredictLoop(EvalLoop):
         with torch.inference_mode():
             tracker = super()._run()
 
-        preds = default_collate(self.predictions)
+        preds = custom_collate(self.predictions)
         return tracker, preds

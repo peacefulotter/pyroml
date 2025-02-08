@@ -196,6 +196,7 @@ class MetricsTracker(Callback):
 
         plot_keys = set(plot_keys or self.records.columns)
         plot_keys -= set(["stage", "step", "epoch"])
+        plot_keys = sorted(plot_keys)
 
         records = self.get_epoch_records() if epoch else self.get_step_records()
 
@@ -204,8 +205,7 @@ class MetricsTracker(Callback):
         figsize = (ncols * 3, nrows * 3)
         fig = plt.figure(figsize=figsize, constrained_layout=True)
 
-        # create 3x1 subfigs
-        subfigs = fig.subfigures(nrows=nrows, ncols=1)
+        subfigs = fig.subfigures(nrows=nrows, ncols=1, squeeze=False).flatten()
         for subfig, _stage in zip(subfigs, stages):
             stage_records = records[records["stage"] == _stage]
 
