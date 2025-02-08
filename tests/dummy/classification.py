@@ -1,14 +1,12 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
-
 from torchmetrics import Metric
 from torchmetrics.classification import BinaryAccuracy, BinaryPrecision, BinaryRecall
 
-from pyroml.model import PyroModel, Step
-from pyroml.utils import Stage
-
-from dummy.regression import DummyRegressionDataset
+from pyroml.core import Stage
+from pyroml.core.model import PyroModel
+from tests.dummy.regression import DummyRegressionDataset
 
 
 class DummyClassificationDataset(Dataset):
@@ -33,6 +31,7 @@ class DummyClassificationModel(PyroModel):
             nn.LeakyReLU(),
             nn.Linear(mid_dim, 1),
         )
+        self.loss = nn.BCEWithLogitsLoss()
 
     def configure_metrics(self) -> dict[Metric]:
         return {
@@ -47,11 +46,11 @@ class DummyClassificationModel(PyroModel):
     def step(self, batch, stage: Stage):
         x, y = batch
         pred = self(x)
-        return {Step.PRED: pred, Step.METRIC_PRED: torch.round(pred), Step.TARGET: y}
+        loss = self.loss(pred, y)
+        return loss
 
 
 if __name__ == "__main__":
-
     acc = 0
     size = 2048
     for x, y in DummyClassificationDataset(size=size):

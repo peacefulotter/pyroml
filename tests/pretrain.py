@@ -1,16 +1,13 @@
-import torch
 import logging
+
+import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from setup import setup_test
-
-from dummy.regression import DummyRegressionModel, DummyRegressionDataset
-from pyroml.trainer import Trainer
+from pyroml.core.trainer import Trainer
+from tests.dummy.regression import DummyRegressionDataset, DummyRegressionModel
 
 if __name__ == "__main__":
-    setup_test()
-
     in_dim = 16
     model = DummyRegressionModel(in_dim=in_dim)
     ds = DummyRegressionDataset(size=256, in_dim=in_dim)
@@ -21,7 +18,7 @@ if __name__ == "__main__":
         batch_size=16,
         lr=0.05,
         wandb=False,
-        evaluate=False,
+        evaluate_on=False,
         compile=False,
         log_level=logging.INFO,
     )

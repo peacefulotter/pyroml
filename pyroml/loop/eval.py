@@ -1,14 +1,10 @@
-from torch.utils.data import Dataset
+import torch
 
-from pyroml.utils import Stage
+from pyroml.core.stage import Stage
 from pyroml.loop.base import Loop
 
 
 class EvalLoop(Loop):
-    def run(self, dataset: Dataset):
-        self.model.eval()
-        super().run(dataset)
-
     @property
     def stage(self):
         return Stage.VAL
@@ -20,3 +16,16 @@ class EvalLoop(Loop):
     @property
     def max_epochs(self):
         return 1
+
+    @property
+    def batch_size(self) -> int:
+        return self.trainer.eval_batch_size
+
+    @property
+    def num_workers(self) -> int:
+        return self.trainer.eval_num_workers
+
+    def _run(self):
+        self.model.eval()
+        with torch.no_grad():
+            return super()._run()

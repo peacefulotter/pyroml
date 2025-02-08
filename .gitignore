@@ -161,11 +161,7 @@ cython_debug/
 
 .vscode/
 wandb/
-
-tests/*data*/
-tests/*.st
-
 **/checkpoints/
-**/iris-data/
-
-temp.ipynb
+**/data/
+*.safetensors
+*.pt

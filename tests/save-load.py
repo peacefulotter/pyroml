@@ -1,7 +1,4 @@
 import torch
-import torch.nn as nn
-import safetensors.torch as st
-
 from setup import setup_test
 
 import pyroml as p
