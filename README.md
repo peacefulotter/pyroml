@@ -10,7 +10,7 @@
 
 ## Usage
 
-You can use 🔥 *pyro* with minimal code changes and forever forget about writing training loops. Here is an example of a pyro model and training script for the Iris dataset to get you started. 
+You can use 🔥 *pyro* with minimal code changes and forever forget about writing training loops. Here is an example of a pyro model and training script to get you started. 
 
 ### 1. Define your **Model**
 
