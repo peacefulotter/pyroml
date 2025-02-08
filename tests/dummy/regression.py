@@ -1,14 +1,15 @@
+import random
+import time
+
 import torch
-import time, random
 import torch.nn as nn
 from torch.utils.data import Dataset
-
 from torchmetrics import Metric
 from torchmetrics.regression import MeanSquaredLogError
 
 import pyroml as p
-from pyroml.model import PyroModel, Step
-from pyroml.utils import Stage
+from pyroml import Stage
+from pyroml.core.model import PyroModel
 
 
 class DummyRegressionDataset(Dataset):
@@ -26,7 +27,6 @@ class DummyRegressionDataset(Dataset):
 
 
 class DummyRegressionModel(PyroModel):
-
     def __init__(self, in_dim=16, sleeping=False):
         super().__init__()
         self.in_dim = in_dim
@@ -37,6 +37,7 @@ class DummyRegressionModel(PyroModel):
             nn.Linear(in_dim * 2, in_dim),
             nn.LeakyReLU(),
         )
+        self.loss = nn.MSELoss()
 
     def configure_optimizers(self, loop: "p.Loop"):
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.trainer.lr)
@@ -65,4 +66,5 @@ class DummyRegressionModel(PyroModel):
     def step(self, batch, stage: Stage):
         x, y = batch
         pred = self(x)
-        return {Step.PRED: pred, Step.TARGET: y}
+        loss = self.loss(pred, y)
+        return loss

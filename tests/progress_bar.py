@@ -2,12 +2,13 @@ import sys
 
 sys.path.append("..")
 
-import time
 import random
-import pyroml as p
-from pyroml import Stage, ProgressBar
+import time
 
-from dummy import DummyClassificationModel
+import pyroml as p
+from pyroml.callbacks.progress import RichProgressBar
+from pyroml.loop.predict import PredictLoop
+from tests.dummy.classification import DummyClassificationModel
 
 if __name__ == "__main__":
     epochs = 3
@@ -15,15 +16,15 @@ if __name__ == "__main__":
 
     model = DummyClassificationModel()
     trainer = p.Trainer()
-    loop = p.TestLoop(trainer, model)
-    progress = ProgressBar()
+    loop = PredictLoop(trainer, model)
+    progress = RichProgressBar()
 
     metrics = {
         "loss": random.random(),
         "acc": random.random(),
     }
 
-    with progress.bar:
+    with progress.progress:
         progress.on_train_start(trainer, loop, **dict())
 
         for e in range(epochs):

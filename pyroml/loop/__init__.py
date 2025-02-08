@@ -1,5 +1,6 @@
 from .base import Loop
-from .test import TestLoop
-from .status import Status
+from .eval import EvalLoop
+from .predict import PredictLoop
 from .train import TrainLoop
-from .progress_bar import ProgressBar
+
+__all__ = ["Loop", "EvalLoop", "PredictLoop", "TrainLoop"]

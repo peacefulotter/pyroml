@@ -2,28 +2,27 @@ import sys
 
 sys.path.append("..")
 
-import torch
 import numpy as np
+import torch
 from torch.utils.data import DataLoader
 
 import pyroml as p
-from pyroml.utils import Stage
-from pyroml.metrics.tracker import MetricTracker
-
-from setup import setup_test
-from dummy.classification import DummyClassificationModel, DummyClassificationDataset
-
+from pyroml import Stage
+from pyroml.core.tracker import MetricsTracker
+from pyroml.loop import PredictLoop
+from tests.dummy.classification import (
+    DummyClassificationDataset,
+    DummyClassificationModel,
+)
 
 if __name__ == "__main__":
-    setup_test()
-
     model = DummyClassificationModel()
     dataset = DummyClassificationDataset()
     loader = iter(DataLoader(dataset, batch_size=16, shuffle=True))
 
     trainer = p.Trainer()
-    loop = p.TestLoop(trainer, model)
-    tracker = MetricTracker(loop.status, model, trainer.loss)
+    loop = PredictLoop(trainer, model)
+    tracker = MetricsTracker(loop.status, model, trainer.loss)
 
     def step(stage: Stage, epoch: int, step: int):
         batch = next(loader)
@@ -72,7 +71,7 @@ if __name__ == "__main__":
     assert step_rec.shape[0] == epochs * (tr_steps_per_epoch + ev_steps_per_epoch)
     assert (
         len(step_rec["stage"].unique()) == 1
-        and step_rec["stage"][0] == p.Stage.TEST.value
+        and step_rec["stage"][0] == p.Stage.PREDICT.value
     )
     assert np.array_equal(np.arange(len(step_rec)), step_rec["step"])
 
