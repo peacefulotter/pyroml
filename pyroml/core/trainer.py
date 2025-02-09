@@ -51,12 +51,12 @@ class Trainer(WithHyperParameters):
         auto_move: bool = True,
         pin_memory: bool | None = None,
         dtype: torch.dtype = torch.float32,
-        compile: bool = True,
+        compile: bool = False,
         checkpoint_folder: str | Path = "./checkpoints",
         hparams_file: str | Path = TRAINER_HPARAMS_FILE,
         batch_size: int = 16,
         eval_batch_size: int = None,
-        num_workers: int = 4,
+        num_workers: int = 0,
         eval_num_workers: int = 0,
         wandb: bool = False,
         wandb_project: str | None = None,
@@ -115,8 +115,8 @@ class Trainer(WithHyperParameters):
                 Default to None.
 
             compile (bool, optional):
-                Whether to compile the model, this can significantly improve training time but is not supported on all GPUs.
-                Defaults to True.
+                Whether to compile the model, this can significantly improve inference time but is not supported on all GPUs.
+                Defaults to False.
 
             checkpoint_folder (str, optional):
                 Folder to save checkpoints.
@@ -136,7 +136,7 @@ class Trainer(WithHyperParameters):
 
             num_workers (int, optional):
                 Number of workers for the dataloader.
-                Defaults to 4.
+                Defaults to 0.
 
             eval_num_workers (int, optional):
                 Number of workers for the evaluation dataloader.

@@ -1,3 +1,3 @@
-from pyroml.template.base.load import load_dataset
+from pyroml.template.base.dataset import TemplateDataset
 
-__all__ = ["load_dataset"]
+__all__ = ["TemplateDataset"]

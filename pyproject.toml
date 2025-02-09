@@ -1,6 +1,6 @@
 [project]
 name = "pyroml"
-version = "2.1.0"
+version = "2.1.1"
 description = "Machine Learning framework allowing plug-and-play training for pytorch models"
 authors = [{ name = "Nathan MAIRE" }]
 readme = "README.md"

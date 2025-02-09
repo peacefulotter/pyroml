@@ -165,3 +165,4 @@ wandb/
 **/data/
 *.safetensors
 *.pt
+*.pth

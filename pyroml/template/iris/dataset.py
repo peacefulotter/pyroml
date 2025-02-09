@@ -1,27 +1,33 @@
 from pathlib import Path
 
 import torch
-from torch.utils.data import Dataset
 
-from pyroml.template.base import load_dataset
+from pyroml.template.base import TemplateDataset
 
 IRIS_SPECIES = ["Iris-setosa", "Iris-versicolor", "Iris-virginica"]
 
 
-class IrisDataset(Dataset):
+def map_species(x):
+    x["Species"] = IRIS_SPECIES.index(x["Species"])
+    return x
+
+
+class IrisDataset(TemplateDataset):
     def __init__(
         self, folder: Path | str = "data/iris", split: str = "train", save: bool = True
     ):
-        super().__init__()
-        self.folder = folder
-        self.split = split
-        self.save = save
+        super().__init__(
+            dataset_path="scikit-learn/iris",
+            folder=folder,
+            transform=None,
+            split=split,
+            save=save,
+        )
 
-        ds = self._load_dataset()
-
-        self.x = torch.empty(len(ds), 4)
-        self.y = torch.zeros(len(ds), 1, dtype=torch.int64)
-        for i, iris in enumerate(ds):
+        # TODO: don't save x and y but compute them in __getitem__
+        self.x = torch.empty(len(self.ds), 4)
+        self.y = torch.zeros(len(self.ds), 1, dtype=torch.int64)
+        for i, iris in enumerate(self.ds):
             self.x[i] = torch.stack(
                 (
                     iris["SepalLengthCm"],
@@ -32,17 +38,8 @@ class IrisDataset(Dataset):
             )
             self.y[i] = iris["Species"]
 
-    def _load_dataset(self):
-        def map_species(x):
-            x["Species"] = IRIS_SPECIES.index(x["Species"])
-            return x
-
-        ds = load_dataset(
-            dataset="scikit-learn/iris",
-            folder=self.folder,
-            split=self.split,
-            save=self.save,
-        )
+    def load_dataset(self):
+        ds = self._load_dataset()
         ds = ds.map(map_species)
         return ds
 

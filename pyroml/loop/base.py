@@ -155,10 +155,7 @@ class Loop:
                 self._trigger_callback("epoch_end")
                 self.after_epoch()
 
-                if (
-                    self.max_epochs is not None
-                    and self.status.epoch + 1 >= self.max_epochs
-                ):
+                if self.max_epochs is not None and self.status.epoch >= self.max_epochs:
                     break
 
                 data_iter = iter(self.loader)

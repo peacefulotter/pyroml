@@ -1,4 +1,4 @@
-from os import PathLike
+from pathlib import Path
 from typing import Optional
 
 from torchvision.transforms.v2 import Transform
@@ -6,18 +6,19 @@ from torchvision.transforms.v2 import Transform
 from pyroml.template.base.dataset import TemplateDataset
 
 
-class MVTecDataset(TemplateDataset):
+class Imagenet1kDataset(TemplateDataset):
     def __init__(
         self,
-        folder: PathLike | str = "data/mvtec",
+        folder: Path | str = "data/imagenet1k",
         transform: Optional[Transform] = None,
         split: str = "train",
         save: bool = True,
     ):
         super().__init__(
-            dataset_path="Voxel51/mvtec-ad",
+            dataset_path="ILSVRC/imagenet-1k",
             folder=folder,
             transform=transform,
             split=split,
             save=save,
+            trust_remote_code=True,
         )
