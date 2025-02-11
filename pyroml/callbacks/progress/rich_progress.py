@@ -17,7 +17,7 @@ from pyroml.callbacks.progress.base_progress import BaseProgress
 from pyroml.utils.log import get_logger
 
 if TYPE_CHECKING:
-    from pyroml.loop.base import Loop
+    from pyroml.core.status import Status
 
 log = get_logger(__name__)
 
@@ -49,7 +49,7 @@ class RichProgress(BaseProgress):
         self.progress.start()
 
     @override
-    def add_task(self, loop: "Loop", total: int, desc: str = None) -> int:
+    def add_task(self, status: "Status", total: int, desc: str = None) -> int:
         task = self.progress.add_task(
             metrics="",
             total=total,

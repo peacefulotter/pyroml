@@ -19,6 +19,7 @@ from pyroml.utils import get_classname
 from pyroml.utils.log import get_logger, set_level_all_loggers
 
 if TYPE_CHECKING:
+    from pyroml.core.status import Status
     from pyroml.callbacks import Callback
     from pyroml.core.tracker import MetricsTracker
     from pyroml.loop.base import Loop
@@ -58,8 +59,6 @@ class Trainer(WithHyperParameters):
         eval_batch_size: int = None,
         num_workers: int = 0,
         eval_num_workers: int = 0,
-        wandb: bool = False,
-        wandb_project: str | None = None,
         log_level: int = logging.INFO,
         callbacks: list["Callback"] = [],
     ):
@@ -143,14 +142,6 @@ class Trainer(WithHyperParameters):
                 Note that a value > 0 can cause an AssertionError: 'can only test a child process during evaluation'.
                 Defaults to 0.
 
-            wandb (bool, optional):
-                Whether to use WandB for logging training metrics.
-                Defaults to False.
-
-            wandb_project (str, optional):
-                Wandb project name, if wandb is set to True.
-                Defaults to None.
-
             log_level (int, optional):
                 Logger level. Use logging.X to get the integer corresponding to the level you want
                 Defaults to logging.INFO
@@ -191,8 +182,6 @@ class Trainer(WithHyperParameters):
         self.eval_num_workers = eval_num_workers
 
         # Logging
-        self.wandb = wandb
-        self.wandb_project = self._get_wandb_project(wandb, wandb_project)
         self.log_level = log_level
 
         # Device and dtypes
@@ -202,6 +191,16 @@ class Trainer(WithHyperParameters):
 
         self.date: str
         self.loop: "Loop"
+        self._status_stack: list["Status"] = []
+
+    @property
+    def status_stack_empty(self):
+        return len(self._status_stack) <= 1
+
+    @property
+    def current_status(self):
+        # TODO: define NOTHING status
+        return self._status_stack[-1] if len(self._status_stack) > 0 else Status.NO_OP
 
     @property
     def eval_enabled(self):
@@ -221,13 +220,6 @@ class Trainer(WithHyperParameters):
         self.loop: "Loop" = None
 
         set_level_all_loggers(level=self.log_level)
-
-    def _get_wandb_project(self, wandb: bool, wandb_project: str | None):
-        project = wandb_project or os.environ.get("WANDB_PROJECT")
-        if wandb and (project == "" or project is None):
-            msg = "Wandb project name is required, please set WANDB_PROJECT in your environment variables or pass wandb_project in the Trainer constructor"
-            raise ValueError(msg)
-        return project
 
     def _fetch_version(self):
         os.makedirs(self.checkpoint_folder, exist_ok=True)
@@ -265,7 +257,11 @@ class Trainer(WithHyperParameters):
         self._setup()
         self.loop: "Loop" = Loop(model=model, trainer=self, dataset=dataset, **kwargs)
         self._setup_model(model)
-        return self.loop.run()
+        # TODO: don't hold self.loop, but rather expose self.current_status
+        self._status_stack.append(self.loop.status)
+        res = self.loop.run()
+        self._status_stack.pop()
+        return res
 
     def fit(
         self, model: "PyroModel", tr_dataset: Dataset, ev_dataset: Dataset = None

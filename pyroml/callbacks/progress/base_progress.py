@@ -8,6 +8,7 @@ from pyroml.callbacks.callback import Callback
 from pyroml.utils.log import get_logger
 
 if TYPE_CHECKING:
+    from pyroml.core.status import Status
     from pyroml.callbacks.callback import CallbackArgs
     from pyroml.loop.base import Loop
 
@@ -35,7 +36,7 @@ class BaseProgress(Callback):
     def setup():
         raise NotImplementedError()
 
-    def add_task(self, loop: "Loop", total: int, desc: str = None) -> int:
+    def add_task(self, status: "Status", total: int, desc: str = None) -> int:
         raise NotImplementedError()
 
     def reset_task(self, task: int, total: int, desc: str = None):
@@ -61,30 +62,31 @@ class BaseProgress(Callback):
 
         log.debug("Setup done")
 
-    def get_task(self, loop: "Loop"):
-        return self._tasks.get(loop.status.stage)
+    def get_task(self, status: "Status"):
+        return self._tasks.get(status.stage)
 
-    def set_task(self, loop: "Loop", task: int):
-        self._tasks[loop.status.stage] = task
+    def set_task(self, status: "Status", task: int):
+        self._tasks[status.stage] = task
 
     # =================== internal api ===================
 
     def _add_stage(
         self,
         loop: "Loop",
+        status: "Status",
         desc: str = None,
     ):
         assert self.enabled
-        log.debug(f"Adding stage {loop.stage.value}")
+        log.debug(f"Adding stage {status.stage.value}")
 
         total = len(loop.loader)
-        task = self.get_task(loop)
+        task = self.get_task(status)
 
         if task is not None:
             self.reset_task(task, total, desc)
         else:
-            task_id = self.add_task(loop, total, desc)
-            self.set_task(loop, task_id)
+            task_id = self.add_task(status, total, desc)
+            self.set_task(status, task_id)
 
     def _get_step_metrics(self, args: "CallbackArgs"):
         metrics = args.loop.tracker.get_last_step_metrics()
@@ -134,11 +136,11 @@ class BaseProgress(Callback):
 
     def _on_epoch_start(self, desc: str, color: ColorMode, args: "CallbackArgs"):
         desc = f"[{color.value}]{desc}" if self.rich_colors else desc
-        self._add_stage(loop=args.loop, desc=desc)
+        self._add_stage(status=args.status, loop=args.loop, desc=desc)
 
     @override
     def on_train_epoch_start(self, args: "CallbackArgs"):
-        self._on_epoch_start(f"Epoch {args.loop.status.epoch}", ColorMode.TR, args)
+        self._on_epoch_start(f"Epoch {args.status.epoch}", ColorMode.TR, args)
 
     @override
     def on_validation_epoch_start(self, args: "CallbackArgs"):
@@ -151,8 +153,8 @@ class BaseProgress(Callback):
     # =================== iter_end ===================
 
     def _on_iter(self, args: "CallbackArgs"):
-        task = self.get_task(args.loop)
-        metrics = self._get_step_metrics(args)
+        task = self.get_task(status=args.status)
+        metrics = self._get_step_metrics(args=args)
         self.update_metrics(task=task, metrics=metrics, advance=1)
 
     @override
@@ -174,13 +176,12 @@ class BaseProgress(Callback):
         args: "CallbackArgs",
         hide: bool = False,
     ):
-        loop = args.loop
-        task = self.get_task(loop)
+        task = self.get_task(status=args.status)
         if not hide:
-            metrics = self._get_epoch_metrics(args)
+            metrics = self._get_epoch_metrics(args=args)
             self.update_metrics(task=task, metrics=metrics, advance=0)
         self.end_progress_task(task, hide)
-        self.set_task(loop, None)
+        self.set_task(status=args.status, task=None)
 
     @override
     def on_train_epoch_end(self, args: "CallbackArgs"):
@@ -195,7 +196,9 @@ class BaseProgress(Callback):
 
         # Save validation epoch metrics to use for the training progress bar
         metrics = args.loop.tracker.get_last_epoch_metrics()
-        metrics = {f"{args.stage.to_prefix()}_{k}": v for k, v in metrics.items()}
+        metrics = {
+            f"{args.status.stage.to_prefix()}_{k}": v for k, v in metrics.items()
+        }
         self._val_epoch_metrics = metrics
 
         self._on_epoch_end(args, hide=True)

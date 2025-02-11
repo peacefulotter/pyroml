@@ -37,13 +37,6 @@ class TrainLoop(Loop):
             self.trainer.eval_enabled and self.ev_dataset is not None
         )
 
-        # TODO: WandB already supports evaluation and prediction, why not include it for all loops
-        if trainer.wandb:
-            from pyroml.loggers.wandb_logger import Wandb
-
-            wandb = Wandb(self)
-            self.callbacks.append(wandb)
-
     @property
     def stage(self):
         return Stage.TRAIN

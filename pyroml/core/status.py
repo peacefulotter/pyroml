@@ -1,14 +1,14 @@
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-import pyroml as p
+if TYPE_CHECKING:
+    from pyroml.core.stage import Stage
+    from pyroml.loop.base import Loop
 
 
 class Status:
-    def __init__(self, stage: "p.Stage"):
+    def __init__(self, stage: "Stage", loop: "Loop"):
         self.stage = stage
-        self.reset()
-
-    def reset(self):
+        self.loop = loop
         self.epoch = 1
         self.step = 1
 

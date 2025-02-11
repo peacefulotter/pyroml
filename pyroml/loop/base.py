@@ -106,9 +106,8 @@ class Loop:
         return CallbackArgs(
             trainer=self.trainer,
             loop=self,
-            stage=self.stage,
-            epoch=self.status.epoch,
-            step=self.status.step,
+            model=self.model,
+            status=self.status,
         )
 
     def _trigger_callback(
@@ -168,7 +167,6 @@ class Loop:
             self.before_step()
 
             # --- Iteration starts
-            self.status.advance_step()
             self._trigger_callback("iter_start")
 
             # ----- Forward pass
@@ -180,10 +178,12 @@ class Loop:
 
             # --- Iteration ends
             self._trigger_callback("iter_end")
+            self.status.advance_step()
 
         self._trigger_callback("end")
 
-        if self.stage != Stage.VAL:
+        # Move model back to CPU only if no other loop is queued
+        if self.trainer.status_stack_empty:
             self.model.cpu()
 
         return self.tracker

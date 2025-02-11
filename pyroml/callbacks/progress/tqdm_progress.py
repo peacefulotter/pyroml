@@ -18,7 +18,7 @@ else:
 if TYPE_CHECKING:
     from tqdm import tqdm as TqdmType
 
-    from pyroml.loop.base import Loop
+    from pyroml.core.status import Status
 
 log = get_logger(__name__)
 
@@ -39,11 +39,11 @@ class TQDMProgress(BaseProgress):
         self.bars = {}
 
     @override
-    def add_task(self, loop: "Loop", total: int, desc: str = None) -> int:
+    def add_task(self, status: "Status", total: int, desc: str = None) -> int:
         task = len(self.bars)
         bar: "TqdmType" = Tqdm(
             desc=desc,
-            leave=self.stack_bars or loop.stage == Stage.TRAIN,
+            leave=self.stack_bars or status.stage == Stage.TRAIN,
             total=total,
             position=task,
             dynamic_ncols=True,
