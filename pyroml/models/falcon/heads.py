@@ -1,3 +1,4 @@
+from typing import Literal
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -44,17 +45,22 @@ class StudentHead(nn.Module):
         return q
 
 
-def with_model_head(model: nn.Module, head_type: str, num_class: int, embed_dim: int):
-    if head_type == "Hypersphere":
+def with_model_head(
+    model: nn.Module,
+    head_type: Literal["hypersphere", "gaussian", "student", "linear"],
+    num_class: int,
+    embed_dim: int,
+):
+    if head_type == "hypersphere":
         model.fc = HypersphereHead(num_class=num_class, embed_dim=embed_dim)
         return model
-    elif head_type == "Gaussian":
+    elif head_type == "gaussian":
         model.fc = GaussianHead(num_class=num_class, embed_dim=embed_dim)
         return model
-    elif head_type == "Student":
+    elif head_type == "student":
         model.fc = StudentHead(num_class=num_class, embed_dim=embed_dim)
         return model
-    elif head_type == "Linear":
+    elif head_type == "linear":
         model.fc = nn.Linear(embed_dim, num_class, bias=True)
         return model
     else:

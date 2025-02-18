@@ -20,4 +20,5 @@ class Flowers102Dataset(TemplateDataset):
             transform=transform,
             split=split,
             save=save,
+            x_key="image",
         )

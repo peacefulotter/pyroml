@@ -24,7 +24,7 @@ You can use 🔥 *pyro* with minimal code changes and forever forget about writi
 import torch
 import pyroml as p
 
-class MySOTAModel(p.PyroModel):
+class MySOTAModel(p.PyroModule):
     def __init__(self):
         super().__init__()
         self.loss_fn = torch.nn.MyLossFunction()
@@ -118,7 +118,7 @@ cd pyroml
 
 # Install dependencies
 poetry config virtualenvs.in-project true  
-poetry install --with dev
+poetry install --with cpu,dev # ,cuda
 ```
 
 ## Tests

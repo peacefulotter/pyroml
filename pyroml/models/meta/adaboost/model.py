@@ -1,0 +1,2 @@
+class AdaBoost:
+    pass

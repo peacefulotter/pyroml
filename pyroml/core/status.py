@@ -6,15 +6,18 @@ if TYPE_CHECKING:
 
 
 class Status:
-    def __init__(self, stage: "Stage", loop: "Loop"):
-        self.stage = stage
+    def __init__(self, loop: "Loop"):
         self.loop = loop
         self.epoch = 1
         self.step = 1
 
+    @property
+    def stage(self) -> "Stage":
+        return self.loop.stage
+
     def to_dict(self, json: bool = False) -> dict[str, Any]:
         d = dict(
-            stage=self.stage,
+            stage=self.loop.stage,
             epoch=self.epoch,
             step=self.step,
         )

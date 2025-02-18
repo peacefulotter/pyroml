@@ -4,7 +4,7 @@ from setup import setup_test
 import pyroml as p
 
 
-class Model(p.PyroModel):
+class Model(p.PyroModule):
     def __init__(self, a=12):
         super().__init__()
         self.a = a

@@ -1,10 +1,9 @@
 import logging
 import os
-import re
 import time
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 import numpy as np
 import pandas as pd
@@ -13,7 +12,7 @@ from torch.utils.data import Dataset
 
 from pyroml.core.autocast import Autocast
 from pyroml.core.hparams import WithHyperParameters
-from pyroml.core.model import PyroModel
+from pyroml.core.model import PyroModule
 from pyroml.loop import EvalLoop, PredictLoop, TrainLoop
 from pyroml.utils import get_classname
 from pyroml.utils.log import get_logger, set_level_all_loggers
@@ -34,7 +33,7 @@ def get_date() -> str:
     return time.strftime("%Y-%m-%d_%H:%M", time.gmtime(time.time()))
 
 
-class NoPyroModelException(Exception):
+class NotAPyroModuleException(Exception):
     pass
 
 
@@ -53,7 +52,6 @@ class Trainer(WithHyperParameters):
         pin_memory: bool | None = None,
         dtype: torch.dtype = torch.float32,
         compile: bool = False,
-        checkpoint_folder: str | Path = "./checkpoints",
         hparams_file: str | Path = TRAINER_HPARAMS_FILE,
         batch_size: int = 16,
         eval_batch_size: int = None,
@@ -117,10 +115,6 @@ class Trainer(WithHyperParameters):
                 Whether to compile the model, this can significantly improve inference time but is not supported on all GPUs.
                 Defaults to False.
 
-            checkpoint_folder (str, optional):
-                Folder to save checkpoints.
-                Defaults to "./checkpoints".
-
             hparams_file (str, optional):
                 File to save hyperparameters.
                 Defaults to Checkpoint.TRAINER_HPARAMS.value.
@@ -172,8 +166,7 @@ class Trainer(WithHyperParameters):
         self.device = device
         self.compile = compile
         self.version = -1
-        self.checkpoint_folder = Path(checkpoint_folder)
-        self.model: "PyroModel" | torch._dynamo.OptimizedModule = None
+        self.model: "PyroModule" | torch._dynamo.OptimizedModule = None
 
         # Data
         self.batch_size = batch_size
@@ -221,18 +214,7 @@ class Trainer(WithHyperParameters):
 
         set_level_all_loggers(level=self.log_level)
 
-    def _fetch_version(self):
-        os.makedirs(self.checkpoint_folder, exist_ok=True)
-        for f in os.scandir(self.checkpoint_folder):
-            if not f.is_dir() or not re.match(r"v_(\d+)", f.name):
-                continue
-            version = int(f.name[2:])
-            self.version = max(self.version, version)
-
-        self.version += 1
-        self.checkpoint_folder = self.checkpoint_folder / f"v_{self.version}"
-
-    def _setup_model(self, model: "PyroModel"):
+    def _setup_model(self, model: "PyroModule"):
         self.model = model
 
         # Compile model if requested, should improve performance
@@ -242,17 +224,17 @@ class Trainer(WithHyperParameters):
         self.model._setup(self)
 
     def _call_loop(
-        self, Loop: "Loop", model: "PyroModel", dataset: Dataset, **kwargs
+        self, Loop: "Loop", model: "PyroModule", dataset: Dataset, **kwargs
     ) -> pd.DataFrame:
         """ "
         Setups the trainer and model and
         Calls a loop with the specified model and dataset.
         """
-        if not isinstance(model, PyroModel) and (
+        if not isinstance(model, PyroModule) and (
             not isinstance(model, torch._dynamo.OptimizedModule)
-            or not isinstance(model._orig_mod, PyroModel)
+            or not isinstance(model._orig_mod, PyroModule)
         ):
-            raise NoPyroModelException("Trainer: model must be a PyroModel")
+            raise NotAPyroModuleException("Trainer: model must be a PyroModule")
 
         self._setup()
         self.loop: "Loop" = Loop(model=model, trainer=self, dataset=dataset, **kwargs)
@@ -264,23 +246,23 @@ class Trainer(WithHyperParameters):
         return res
 
     def fit(
-        self, model: "PyroModel", tr_dataset: Dataset, ev_dataset: Dataset = None
+        self, model: "PyroModule", tr_dataset: Dataset, ev_dataset: Dataset = None
     ) -> "MetricsTracker":
         return self._call_loop(
             Loop=TrainLoop, model=model, dataset=tr_dataset, ev_dataset=ev_dataset
         )
 
-    def evaluate(self, model: "PyroModel", dataset: Dataset) -> "MetricsTracker":
+    def evaluate(self, model: "PyroModule", dataset: Dataset) -> "MetricsTracker":
         return self._call_loop(Loop=EvalLoop, model=model, dataset=dataset)
 
     def predict(
-        self, model: "PyroModel", dataset: Dataset
+        self, model: "PyroModule", dataset: Dataset
     ) -> tuple["MetricsTracker", Any]:
         return self._call_loop(Loop=PredictLoop, model=model, dataset=dataset)
 
-    def save_state(
+    def save(
         self,
-        folder: Path | str = None,
+        folder: Path | str,
         file: Path | str = TRAINER_STATE_FILE,
     ) -> None:
         # Saving state
@@ -294,33 +276,18 @@ class Trainer(WithHyperParameters):
             state["scheduler_name"] = get_classname(self.model.scheduler)
             state["scheduler"] = self.model.scheduler.state_dict()
 
-        folder = Path(folder) or self.checkpoint_folder
+        folder = Path(folder)
         os.makedirs(folder, exist_ok=True)
         torch.save(obj=state, f=folder / file)
-
-    def load_state(
-        self,
-        folder: Path | str = None,
-        file: Path | str = TRAINER_STATE_FILE,
-    ) -> None:
-        folder = Path(folder) or self.checkpoint_folder
-        state = torch.load(folder / file, map_location="cpu")
-
-        self.model.optimizer.load_state_dict(state["optimizer"])
-        if hasattr(self, "scheduler") and "scheduler" in state:
-            self.model.scheduler.load_state_dict(state["scheduler"])
-
-    def save(self, model: "PyroModel"):
-        if self.version < 0:
-            self._fetch_version()
-        self.save_state(self.checkpoint_folder)
-        model.save(self.checkpoint_folder)
 
     @staticmethod
     def load(
         folder: Path | str,
         file: Path | str = TRAINER_HPARAMS_FILE,
+        model: Optional["PyroModule"] = None,
     ):
+        # TODO: two methods, one for loading the trainer
+        # Another one for continuint training ?
         """
         Loads a pretrained model from a specified checkpoint folder.
 
@@ -336,10 +303,13 @@ class Trainer(WithHyperParameters):
             folder (str): The folder path where the pretrained model is saved.
         """
         folder = Path(folder)
-        hparams_file = folder if os.path.isfile(folder) else folder / file
-        args = WithHyperParameters._load_hparams(hparams_file)
+        args = WithHyperParameters._load_hparams(folder / file)
+        trainer = Trainer(**args)
 
         # TODO: find a way to reload the optimizer and scheduler to the model
+        if model is not None:
+            model.load
+
         # optim = getattr(torch.optim, args.optimizer)
         # sched = getattr(torch.optim.lr_scheduler, args.scheduler)
         # Should be loaded in the model
@@ -350,5 +320,4 @@ class Trainer(WithHyperParameters):
             "Loading callbacks is not supported, if you have custom callbacks please add them to the trainer again"
         )
 
-        trainer = Trainer(**args)
         return trainer

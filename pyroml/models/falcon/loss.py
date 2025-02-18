@@ -13,8 +13,6 @@ from .utils import compute_assignment_from_cost, cosine_annealing, entropy
 
 if TYPE_CHECKING:
     from pyroml.callbacks.callback import CallbackArgs
-
-    from .config import FalconConfig
     from .model import Falcon
 
 
@@ -22,11 +20,29 @@ class FalconLoss(nn.Module, Callback):
     def __init__(
         self,
         model: "Falcon",
-        cfg: "FalconConfig",
+        fine_classes: int,
+        coarse_classes: int,
+        beta_reg: float,
+        time_limit: float,
+        soft_labels_epochs: int,
+        solve_every: int,
+        loss_temp: float,
+        loss_lambda1: float,
+        loss_lambda2: float,
+        loss_lambda3: float,
     ):
         super().__init__()
         self.model = model
-        self.cfg = cfg
+        self.fine_classes = fine_classes
+        self.coarse_classes = coarse_classes
+        self.beta_reg = beta_reg
+        self.time_limit = time_limit
+        self.soft_labels_epochs = soft_labels_epochs
+        self.solve_every = solve_every
+        self.temp = loss_temp
+        self.lambda1 = loss_lambda1
+        self.lambda2 = loss_lambda2
+        self.lambda3 = loss_lambda3
 
         self.tau = 0
         self.fine_preds = []
@@ -72,26 +88,24 @@ class FalconLoss(nn.Module, Callback):
     def compute_assignment_from_cost(self, cost: torch.Tensor):
         return compute_assignment_from_cost(
             cost.cpu().numpy(),
-            reg_coef=self.cfg.beta_reg,
-            time_limit=self.cfg.time_limit,
+            reg_coef=self.beta_reg,
+            time_limit=self.time_limit,
         )
 
     def on_train_start(self, args: "CallbackArgs"):
         # TODO: retrieve fine/coarse classes from either kwargs or => trainer
         # Add a way to retrieve current loop, current status and current dataset
-        cost = torch.randn(self.cfg.fine_classes, self.cfg.coarse_classes).softmax(-1)
+        cost = torch.randn(self.fine_classes, self.coarse_classes).softmax(-1)
         self.M = self.compute_assignment_from_cost(cost).to(self.device)
 
     def on_train_epoch_start(self, args: "CallbackArgs"):
         epoch: int = args.epoch
         self.tau = (
-            cosine_annealing(1, 0.0, epoch - 1, self.cfg.soft_labels_epochs)
-            if epoch <= self.cfg.soft_labels_epochs
+            cosine_annealing(1, 0.0, epoch - 1, self.soft_labels_epochs)
+            if epoch <= self.soft_labels_epochs
             else 0.0
         )
-        self.cfg.beta_reg = (
-            self.cfg.beta_reg if epoch <= self.cfg.soft_labels_epochs else 0.0
-        )
+        self.beta_reg = self.beta_reg if epoch <= self.soft_labels_epochs else 0.0
         print(f"Tau: {self.tau}")
 
     def forward(
@@ -154,9 +168,7 @@ class FalconLoss(nn.Module, Callback):
 
             mask = ~self.M.T[y_coarse].bool()
             q_fine_soft = (
-                (logits_ema / self.cfg.loss_temp)
-                .masked_fill(mask, float("-inf"))
-                .softmax(-1)
+                (logits_ema / self.temp).masked_fill(mask, float("-inf")).softmax(-1)
             )
 
             q_fine_hard = F.one_hot(
@@ -173,9 +185,9 @@ class FalconLoss(nn.Module, Callback):
             loss_reg_fine: torch.Tensor = -entropy(avg_prob) + math.log(probs.shape[1])
 
             loss_total = (
-                self.cfg.loss_lambda1 * loss_cls_coarse
-                + self.cfg.loss_lambda2 * (loss_cls_fine + loss_consist)
-                + self.cfg.loss_lambda3 * loss_reg_fine
+                self.lambda1 * loss_cls_coarse
+                + self.lambda2 * (loss_cls_fine + loss_consist)
+                + self.lambda3 * loss_reg_fine
             )
 
             self.model.log(
@@ -190,11 +202,12 @@ class FalconLoss(nn.Module, Callback):
         return loss_total
 
     def on_train_iter_end(self, args: "CallbackArgs"):
+        # FIXME: doubt its on train iter end
         step: int = args.step
-        if step > 0 and step % self.cfg.solve_every == 0:
+        if step > 0 and step % self.solve_every == 0:
             preds = torch.cat(self.fine_preds, dim=0).to(self.device)
             labels = torch.cat(self.coarse_labels, dim=0).to(self.device)
-            coarse_gt_oh = F.one_hot(labels, self.cfg.coarse_classes).float()
+            coarse_gt_oh = F.one_hot(labels, self.coarse_classes).float()
             cost = (preds.T @ coarse_gt_oh) / coarse_gt_oh.shape[0]
             self.M = self.compute_assignment_from_cost(cost).to(self.device)
             self.coarse_labels, self.fine_preds = [], []

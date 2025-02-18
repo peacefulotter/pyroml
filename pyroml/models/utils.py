@@ -1,10 +1,20 @@
+import torch
 import torch.nn as nn
 
+from typing import TYPE_CHECKING
+from torch.utils.data import Dataset
 
-def unfreeze_last_layers(model: nn.Module, n: int, verbose=True):
+from pyroml.callbacks.progress.tqdm_progress import TQDMProgress
+from pyroml.core.trainer import Trainer
+
+if TYPE_CHECKING:
+    from pyroml.core import PyroModule
+
+
+def unfreeze_last_layers(model: nn.Module, n: int, depth: int = 2, verbose=True):
     layers: dict[str, list[nn.Parameter]] = {}
     for name, param in model.named_parameters():
-        key = "".join(name.split(".")[:2])
+        key = "".join(name.split(".")[:depth])
         if key not in layers:
             layers[key] = []
         layers[key].append(param)
@@ -20,3 +30,28 @@ def unfreeze_last_layers(model: nn.Module, n: int, verbose=True):
         for name, param in model.named_parameters():
             if param.requires_grad:
                 print(name)
+
+
+def num_params(model: "nn.Module", only_trainable=False):
+    return sum(
+        [p.numel() for p in model.parameters() if not only_trainable or p.requires_grad]
+    )
+
+
+def get_features(
+    model: "PyroModule",
+    dataset: Dataset,
+    batch_size: int = 16,
+    dtype: torch.dtype = torch.float32,
+    device: str | torch.device = "auto",
+) -> torch.Tensor:
+    temp_trainer = Trainer(
+        lr=0,
+        batch_size=batch_size,
+        max_epochs=1,
+        device=device,
+        dtype=dtype,
+        callbacks=[TQDMProgress()],
+    )
+    _, preds = temp_trainer.predict(model, dataset)
+    return preds

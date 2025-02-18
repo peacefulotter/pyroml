@@ -6,6 +6,8 @@ import timm
 import torch
 import torch.nn as nn
 
+from pyroml.models.utils import num_params
+
 
 class BackboneNotFoundException(Exception):
     pass
@@ -21,12 +23,6 @@ def list_available() -> list[str]:
         pass
 
     return set(models)
-
-
-def num_params(model: "nn.Module", only_trainable=False):
-    return sum(
-        [p.numel() for p in model.parameters() if not only_trainable or p.requires_grad]
-    )
 
 
 class TimmModule(nn.Module):

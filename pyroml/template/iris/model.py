@@ -6,7 +6,7 @@ import pyroml as p
 from pyroml.core.stage import Stage
 
 
-class IrisModel(p.PyroModel):
+class IrisModel(p.PyroModule):
     def __init__(self, hidden_dim=32):
         super().__init__()
         self.module = nn.Sequential(

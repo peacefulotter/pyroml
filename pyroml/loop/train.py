@@ -11,7 +11,7 @@ from pyroml.loop.base import Loop
 from pyroml.utils.log import get_logger
 
 if TYPE_CHECKING:
-    from pyroml.core.model import PyroModel
+    from pyroml.core.model import PyroModule
     from pyroml.core.trainer import Trainer
 
 log = get_logger(__name__)
@@ -21,7 +21,7 @@ class TrainLoop(Loop):
     def __init__(
         self,
         trainer: "Trainer",
-        model: "PyroModel",
+        model: "PyroModule",
         dataset: Dataset,
         ev_dataset: Dataset = None,
     ):

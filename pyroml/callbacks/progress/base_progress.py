@@ -90,13 +90,13 @@ class BaseProgress(Callback):
 
     def _get_step_metrics(self, args: "CallbackArgs"):
         metrics = args.loop.tracker.get_last_step_metrics()
-        if args.stage == Stage.TRAIN:
+        if args.status.stage == Stage.TRAIN:
             metrics.update(self._val_epoch_metrics)
         return metrics
 
     def _get_epoch_metrics(self, args: "CallbackArgs"):
         metrics = args.loop.tracker.get_last_epoch_metrics()
-        if args.stage == Stage.TRAIN:
+        if args.status.stage == Stage.TRAIN:
             metrics.update(self._val_epoch_metrics)
         return metrics
 

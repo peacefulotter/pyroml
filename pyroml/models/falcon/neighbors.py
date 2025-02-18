@@ -49,7 +49,7 @@ def gather_representations(loader, model):
     return feats, actual, actual_coarse
 
 
-def neighours_with_coarse_(backbone: str, dataset: Dataset, num_neighbors: int):
+def neighours_with_coarse(backbone: str, dataset: Dataset, num_neighbors: int):
     _FAISS_AVAILABLE = False
     try:
         import faiss
@@ -93,7 +93,7 @@ def neighours_with_coarse_(backbone: str, dataset: Dataset, num_neighbors: int):
 
 def _compute_neighbors(dataset: Dataset, num_neighbors: int):
     neighbors_with_coarse, neighbors_classes_with_coarse, actual = (
-        neighours_with_coarse_(model, train_loader, num_neighbors, cfg.USE_FAISS)
+        neighours_with_coarse(model, train_loader, num_neighbors, cfg.USE_FAISS)
     )
     correct_neighbors_with_coarse_percentage = (
         (actual.unsqueeze(1).repeat(1, num_neighbors) == neighbors_classes_with_coarse)

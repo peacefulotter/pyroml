@@ -16,6 +16,7 @@ class TemplateDataset(Dataset):
         transform: Optional[Transform] = None,
         split: str = "train",
         save: bool = True,
+        x_key: str = "img",
         **kwargs,
     ):
         super().__init__()
@@ -24,6 +25,7 @@ class TemplateDataset(Dataset):
         self.transform = transform
         self.split = split
         self.save = save
+        self.x_key = x_key
 
         self.ds = self.load_dataset(**kwargs)
 
@@ -53,5 +55,6 @@ class TemplateDataset(Dataset):
     def __getitem__(self, idx):
         item = self.ds[idx]
         if self.transform:
-            item["img"] = self.transform(item["img"])
+            x = item[self.x_key]
+            item[self.x_key] = self.transform(x)
         return item

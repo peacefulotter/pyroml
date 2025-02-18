@@ -16,22 +16,53 @@ if TYPE_CHECKING:
     from pyroml.core.trainer import Trainer
     from pyroml.loop import Loop
 
-    from .config import FalconConfig
 
-
-class Falcon(p.PyroModel):
-    def __init__(self, backbone: nn.Module, cfg: "FalconConfig"):
+class Falcon(p.PyroModule):
+    def __init__(
+        self,
+        backbone: nn.Module,
+        # Number of fine and coarse classes
+        fine_classes: int,
+        coarse_classes: int,
+        # Model
+        embed_dim: int,  # Model embedding size (last layer output shape)
+        head_type: str = "Linear",
+        # Training parameters
+        beta_reg: float = 0.1,
+        time_limit: float = 30,  # in seconds
+        soft_labels_epochs: int = 30,
+        solve_every: int = 20,
+        ## Loss
+        loss_temp: float = 0.9,
+        loss_lambda1: float = 0.5,
+        loss_lambda2: float = 0.5,
+        loss_lambda3: float = 0.5,
+    ):
+        """
+        Default values are mostly taken from https://github.com/mlbio-epfl/falcon/blob/main/configs/cifar100/coarse2fine/base.yaml
+        """
         super().__init__()
         self.backbone = with_model_head(
             model=backbone,
-            head_type=cfg.head_type,
-            num_class=cfg.fine_classes,
-            embed_dim=cfg.embed_dim,
+            head_type=head_type,
+            num_class=fine_classes,
+            embed_dim=embed_dim,
         )
-        self.cfg = cfg
 
         self.ema = ExponentialMovingAverage(self.parameters(), decay=0.99)
-        self.loss = FalconLoss(model=self, cfg=self.cfg)
+        self.loss = FalconLoss(
+            model=self,
+            fine_classes=fine_classes,
+            coarse_classes=coarse_classes,
+            beta_reg=beta_reg,
+            time_limit=time_limit,
+            soft_labels_epochs=soft_labels_epochs,
+            solve_every=solve_every,
+            loss_temp=loss_temp,
+            loss_lambda1=loss_lambda1,
+            loss_lambda2=loss_lambda2,
+            loss_lambda3=loss_lambda3,
+        )
 
     def _setup(self, trainer: "Trainer"):
         super()._setup(trainer)

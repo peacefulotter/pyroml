@@ -5,6 +5,7 @@
 - Write proper tests
 - add time per iteration, time per epoch, more?
 - Add docs
+- Add warnings properyl: https://github.com/Lightning-AI/utilities/blob/main/src/lightning_utilities/core/rank_zero.py
 - use DistributeDataParallel:
   - ````py
     with ctx:
@@ -19,3 +20,13 @@ extra_args = dict(fused=True) if use_fused else dict()
 optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)
 ```
 - amp GradScaler for float16
+- Add benchmarks callbacks
+  - Memory 
+```python
+torch.cuda.memory._record_memory_history(enabled='all')
+s = torch.cuda.memory._snapshot()
+with open(f"snapshot.pickle", "wb") as f:
+    dump(s, f)
+torch.cuda.memory._record_memory_history(enabled=None)
+```
+  

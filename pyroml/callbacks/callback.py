@@ -5,7 +5,7 @@ from pyroml.utils.env import PyroEnv, get_bool_env
 from pyroml.utils.log import get_logger
 
 if TYPE_CHECKING:
-    from pyroml.core.model import PyroModel
+    from pyroml.core.model import PyroModule
     from pyroml.core.status import Status
     from pyroml.core.trainer import Trainer
     from pyroml.loop.base import Loop
@@ -17,7 +17,7 @@ log = get_logger(__name__)
 class CallbackArgs:
     trainer: "Trainer"
     loop: "Loop"
-    model: "PyroModel"
+    model: "PyroModule"
     status: "Status"
 
 

@@ -5,7 +5,7 @@ from torchmetrics import Metric
 from torchmetrics.classification import BinaryAccuracy, BinaryPrecision, BinaryRecall
 
 from pyroml.core import Stage
-from pyroml.core.model import PyroModel
+from pyroml.core.model import PyroModule
 from tests.dummy.regression import DummyRegressionDataset
 
 
@@ -22,7 +22,7 @@ class DummyClassificationDataset(Dataset):
         return x, y
 
 
-class DummyClassificationModel(PyroModel):
+class DummyClassificationModel(PyroModule):
     # Interestingly, with mid_dim=16 and seed=42, the model is naturally good at the dummy classification task :)
     def __init__(self, mid_dim=24):
         super().__init__()

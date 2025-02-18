@@ -59,8 +59,8 @@ class MetricsTracker(Callback):
             if col not in self.records.columns:
                 self.records[col] = np.nan
 
-        metrics["stage"] = args.stage.value
-        metrics["epoch"] = args.epoch
+        metrics["stage"] = args.status.stage.value
+        metrics["epoch"] = args.status.epoch
 
         self.records.loc[len(self.records)] = metrics
 
@@ -108,8 +108,8 @@ class MetricsTracker(Callback):
         Compute epoch metrics as the average over the current epoch
         """
         metrics = self.records[
-            (self.records["stage"] == args.stage.value)
-            & (self.records["epoch"] == args.epoch)
+            (self.records["stage"] == args.status.stage.value)
+            & (self.records["epoch"] == args.status.epoch)
         ].copy()
 
         metrics.drop(
@@ -145,7 +145,7 @@ class MetricsTracker(Callback):
     def _on_iter_end(self, args: "CallbackArgs") -> dict[str, float]:
         metrics = self._current_step_metrics
         metrics = {k: detach(v) for k, v in metrics.items()}
-        metrics["step"] = args.step
+        metrics["step"] = args.status.step
         self._register_metrics(metrics, args)
         return metrics
 

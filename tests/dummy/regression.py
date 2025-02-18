@@ -9,7 +9,7 @@ from torchmetrics.regression import MeanSquaredLogError
 
 import pyroml as p
 from pyroml import Stage
-from pyroml.core.model import PyroModel
+from pyroml.core.model import PyroModule
 
 
 class DummyRegressionDataset(Dataset):
@@ -26,7 +26,7 @@ class DummyRegressionDataset(Dataset):
         return x, y
 
 
-class DummyRegressionModel(PyroModel):
+class DummyRegressionModel(PyroModule):
     def __init__(self, in_dim=16, sleeping=False):
         super().__init__()
         self.in_dim = in_dim

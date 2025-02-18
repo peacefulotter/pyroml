@@ -1,14 +1,15 @@
 from typing import TYPE_CHECKING, Any, Callable, Dict, Tuple, Type, Union
+import warnings
 
 import torch
 import torch.utils.data._utils.collate
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
 from pyroml.core.stage import Stage
 from pyroml.loop.eval import EvalLoop
 
 if TYPE_CHECKING:
-    from pyroml.core.model import PyroModel
+    from pyroml.core.model import PyroModule
     from pyroml.core.trainer import Trainer
 
 
@@ -31,9 +32,29 @@ def custom_collate(batch):
 
 
 class PredictLoop(EvalLoop):
-    def __init__(self, trainer: "Trainer", model: "PyroModel", dataset: Dataset):
+    def __init__(self, trainer: "Trainer", model: "PyroModule", dataset: Dataset):
         super().__init__(trainer=trainer, model=model, dataset=dataset)
-        self.predictions: list[Any] = []
+        self.predictions: torch.Tensor | list[Any] = []
+        self.pred_idx = 0
+
+    def on_predict_start(self, _):
+        """
+        Before running the prediciton loop, we prepare the predictions tensor
+        by constructing an empty tensor with the proper size
+        """
+        loader = DataLoader(self.dataset, batch_size=1)
+        batch = next(iter(loader))
+        with torch.no_grad():
+            preds = self.model.step(batch, stage=self.stage)
+
+        if isinstance(preds, torch.Tensor):
+            size = (len(self.dataset),) + preds.size[1:]
+            self.predictions = torch.empty(size)
+        else:
+            warnings.warn(
+                "Your model step method did not return a tensor during prediction, we thus cannot predict the final predictions shape which might be much slower"
+            )
+            self.predictions = []
 
     @property
     def max_steps(self):
@@ -43,12 +64,20 @@ class PredictLoop(EvalLoop):
     def stage(self):
         return Stage.PREDICT
 
-    def after_step(self, output: torch.Tensor | Any):
-        self.predictions.append(output)
+    def after_step(self, output: torch.Tensor):
+        if isinstance(self.predictions, list):
+            self.predictions.append(output)
+        else:
+            batch_size = output.shape[0]
+            i = self.pred_idx
+            self.predictions[i : i + batch_size] = output
+            self.pred_idx += batch_size
 
     def _run(self):
-        with torch.inference_mode():
-            tracker = super()._run()
-
-        preds = custom_collate(self.predictions)
+        tracker = super()._run()
+        preds = (
+            custom_collate(self.predictions)
+            if isinstance(self.predictions, list)
+            else self.predictions
+        )
         return tracker, preds

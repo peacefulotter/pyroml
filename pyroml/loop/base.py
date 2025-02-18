@@ -14,7 +14,7 @@ from pyroml.utils.log import get_logger
 if TYPE_CHECKING:
     from pyroml.callbacks import Callback
     from pyroml.core.autocast import Autocast
-    from pyroml.core.model import PyroModel
+    from pyroml.core.model import PyroModule
     from pyroml.core.trainer import Trainer
 
 log = get_logger(__name__)
@@ -22,12 +22,12 @@ log = get_logger(__name__)
 
 class Loop:
     def __init__(
-        self, trainer: "Trainer", model: "PyroModel", dataset: Dataset
+        self, trainer: "Trainer", model: "PyroModule", dataset: Dataset
     ) -> None:
         self.trainer = trainer
         self.model = model
 
-        self.status = Status(stage=self.stage)
+        self.status = Status(loop=self)
         self.tracker = MetricsTracker(status=self.status)
 
         # Callbacks, in order of execution
@@ -135,11 +135,11 @@ class Loop:
     def _run(self):
         data_iter = iter(self.loader)
 
-        self._trigger_callback("start")
-        self._trigger_callback("epoch_start")
-
         if self.model.device != self.device:
             self.model.to(self.device)
+
+        self._trigger_callback("start")
+        self._trigger_callback("epoch_start")
 
         while True:
             if self.status.step > self.total_steps:
