@@ -9,8 +9,6 @@ requires-python = ">=3.10"
 urls = { github = "https://github.com/peacefulotter/pyroml" }
 
 dependencies = [
-    "torch (>=2.6.0)",
-    "torchvision (>=0.21.0)",
     "torchmetrics (>=1.6.1,<2.0.0)",
     "datasets (>=3.2.0,<4.0.0)",
     "rich (>=13.9.4,<14.0.0)",
@@ -18,6 +16,44 @@ dependencies = [
     "safetensors (>=0.5.2,<0.6.0)",
 ]
 
+[project.optional-dependencies]
+cpu = ["torch>=2.6.0", "torchvision>=0.21.0"]
+cu124 = ["torch>=2.6.0", "torchvision>=0.21.0"]
+dev = ["ipykernel", "ipywidgets"]
+test = ["pytest"]
+extra = [
+    "wandb",
+    "torch-ema",
+    "timm",
+    "einops",
+    "gurobipy",
+    "scipy",
+    "scikit-learn",
+]
+
+
+[tool.uv]
+conflicts = [[{ extra = 'cpu' }, { extra = 'cu124' }]]
+
+[tool.uv.sources]
+torch = [
+    { index = 'pytorch-cpu', extra = 'cpu' },
+    { index = 'pytorch-cu124', extra = 'cu124' },
+]
+torchvision = [
+    { index = 'pytorch-cpu', extra = 'cpu' },
+    { index = 'pytorch-cu124', extra = 'cu124' },
+]
+
+[[tool.uv.index]]
+name = 'pytorch-cpu'
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = 'pytorch-cu124'
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
 
 [tool.poetry.dependencies]
 python = "^3.10"
