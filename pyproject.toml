@@ -1,6 +1,6 @@
 [project]
 name = "pyroml"
-version = "2.1.1"
+version = "2.1.2"
 description = "Machine Learning framework allowing plug-and-play training for pytorch models"
 authors = [{ name = "Nathan MAIRE" }]
 readme = "README.md"
@@ -31,6 +31,8 @@ extra = [
     "scikit-learn",
 ]
 
+[tool.setuptools.dynamic]
+version = { attr = "pyroml.__version__" }
 
 [tool.uv]
 conflicts = [[{ extra = 'cpu' }, { extra = 'cu124' }]]
