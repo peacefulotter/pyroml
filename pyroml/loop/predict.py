@@ -52,7 +52,7 @@ class PredictLoop(EvalLoop):
             preds = self.model.step(batch, stage=self.stage)
 
         if isinstance(preds, torch.Tensor):
-            size = (len(self.dataset), *preds.size[1:])
+            size = (len(self.dataset), *preds.shape[1:])
             self.predictions = torch.empty(size, device=self.trainer.device)
         else:
             warnings.warn(
