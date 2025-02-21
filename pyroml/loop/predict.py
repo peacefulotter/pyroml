@@ -7,6 +7,7 @@ from torch.utils.data import Dataset, DataLoader
 
 from pyroml.core.stage import Stage
 from pyroml.loop.eval import EvalLoop
+from pyroml.utils.device import to_device
 
 if TYPE_CHECKING:
     from pyroml.core.model import PyroModule
@@ -44,12 +45,15 @@ class PredictLoop(EvalLoop):
         """
         loader = DataLoader(self.dataset, batch_size=1)
         batch = next(iter(loader))
+        if self.trainer.auto_move:
+            batch = to_device(batch, device=self.trainer.device)
+
         with torch.no_grad():
             preds = self.model.step(batch, stage=self.stage)
 
         if isinstance(preds, torch.Tensor):
-            size = (len(self.dataset),) + preds.size[1:]
-            self.predictions = torch.empty(size)
+            size = (len(self.dataset), *preds.size[1:])
+            self.predictions = torch.empty(size, device=self.trainer.device)
         else:
             warnings.warn(
                 "Your model step method did not return a tensor during prediction, we thus cannot predict the final predictions shape which might be much slower"
