@@ -56,7 +56,7 @@ class Loop(Callback):
         )
 
         self.steps_per_epoch: int = len(self.loader)
-        self.total_steps: int = self._estimate_number_steps(dataset)
+        self.total_steps: int = self._estimate_number_steps(self.loader)
 
     @property
     def stage(self) -> "Stage":
