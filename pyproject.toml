@@ -30,6 +30,7 @@ extra = [
     "scipy",
     "scikit-learn",
 ]
+full = ["pyroml[cu124,dev,test,extra]"]
 
 [tool.setuptools.dynamic]
 version = { attr = "pyroml.__version__" }
