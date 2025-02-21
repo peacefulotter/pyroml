@@ -12,7 +12,6 @@ from pyroml.utils.device import to_device
 from pyroml.utils.log import get_logger
 
 if TYPE_CHECKING:
-    from pyroml.callbacks import Callback
     from pyroml.core.autocast import Autocast
     from pyroml.core.model import PyroModule
     from pyroml.core.trainer import Trainer
@@ -20,7 +19,7 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 
-class Loop:
+class Loop(Callback):
     def __init__(
         self, trainer: "Trainer", model: "PyroModule", dataset: Dataset
     ) -> None:
@@ -33,6 +32,7 @@ class Loop:
         # Callbacks, in order of execution
         # Tracker is first to expose metrics to other callbacks
         self.callbacks: list[Callback] = [
+            self,
             self.tracker,
             self.model,
             *trainer.callbacks,

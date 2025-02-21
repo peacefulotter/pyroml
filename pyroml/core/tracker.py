@@ -200,6 +200,11 @@ class MetricsTracker(Callback):
 
         records = self.get_epoch_records() if epoch else self.get_step_records()
 
+        # Since step counter is reset every epoch, we prevent plotting the step metrics over each other
+        # By overriding the step column
+        if not epoch:
+            records["step"] = np.arange(len(records))
+
         nrows = len(stages)
         ncols = len(plot_keys)
         figsize = (ncols * 3, nrows * 3)
