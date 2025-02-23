@@ -52,10 +52,16 @@ class TimmFeatureExtractor(TimmModule):
     ):
         super().__init__(model=model, feature_info=model.feature_info.info)
         self.layers = [layer["module"] for layer in self.feature_info]
+        self.out_indices = out_indices
+        self._compute_last_dim(image_size)
 
-        o: torch.Tensor = model(torch.randn(1, *image_size))
-        self.feature_dims = {self.layers[i]: x.shape for i, x in zip(out_indices, o)}
-        self.last_dim = self.feature_dims[self.layers[out_indices[-1]]]
+    def _compute_last_dim(self, image_size: int):
+        o: torch.Tensor = self.model(torch.randn(1, *image_size))
+        self.feature_dims = {
+            self.layers[i]: x.shape for i, x in zip(self.out_indices, o)
+        }
+        self.last_dim = self.feature_dims[self.layers[self.out_indices[-1]]]
+        return self.last_dim
 
     @property
     def features(self):
@@ -73,9 +79,12 @@ class TimmBackbone(TimmModule):
         image_size: tuple[int, int, int],
     ):
         super().__init__(model=model, feature_info=model.feature_info)
+        self.last_dim = self._compute_last_dim(image_size)
 
-        o: torch.Tensor = model(torch.randn(1, *image_size))
-        self.last_dim = o[0].shape
+    def _compute_last_dim(self, image_size: int):
+        out: torch.Tensor = self.model(torch.randn(1, *image_size))
+        self.last_dim = out[0].shape
+        return self.last_dim
 
 
 class Backbone:

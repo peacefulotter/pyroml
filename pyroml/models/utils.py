@@ -1,7 +1,7 @@
+from typing import TYPE_CHECKING
+
 import torch
 import torch.nn as nn
-
-from typing import TYPE_CHECKING
 from torch.utils.data import Dataset
 
 from pyroml.callbacks.progress.tqdm_progress import TQDMProgress
@@ -11,10 +11,16 @@ if TYPE_CHECKING:
     from pyroml.core import PyroModule
 
 
+def freeze_module(model: nn.Module):
+    for param in model.parameters():
+        param.requires_grad = False
+
+
 def unfreeze_last_layers(model: nn.Module, n: int, depth: int = 2, verbose=True):
     layers: dict[str, list[nn.Parameter]] = {}
     for name, param in model.named_parameters():
         key = "".join(name.split(".")[:depth])
+        print(name, param.requires_grad)
         if key not in layers:
             layers[key] = []
         layers[key].append(param)
