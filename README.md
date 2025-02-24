@@ -84,14 +84,14 @@ _, test_preds = trainer.predict(model, test_dataset)
 print("Test Predictions", test_preds)
 ```
 
-## Requirements
+## 🐍 Requirements
 
 - **Python** ^3.10 | ^3.11 | ^3.12
 - Recommended, either:
   - **uv** ^0.6 ([docs](https://docs.astral.sh/uv/))
   - **poetry** ^2 ([docs](https://python-poetry.org/docs/))
 
-## Installation
+## 📦 Installation
 
 Before proceeding, we suggest taking a quick look at the [`pyproject.toml`](pyproject.toml) for extra groups that you might want. Below are package manager specific commands to install pyro along with its dependencies.
 
@@ -101,9 +101,9 @@ Before proceeding, we suggest taking a quick look at the [`pyproject.toml`](pypr
 # For default installation
 uv add pyroml
 # Add an extra group to target specific pytorch installs, use either cpu or cu124
-uv add --extra (cpu / cu124)
+uv add pyroml --extra (cpu / cu124)
 # To also install additional dependencies that you might require
-uv add --extra extra
+uv add pyroml --extra extra
 ```
 
 ### poetry
