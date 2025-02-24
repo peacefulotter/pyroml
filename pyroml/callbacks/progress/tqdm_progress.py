@@ -2,7 +2,7 @@
 
 import importlib
 import importlib.util
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from typing_extensions import override
 
@@ -18,7 +18,7 @@ else:
 if TYPE_CHECKING:
     from tqdm import tqdm as TqdmType
 
-    from pyroml.core.status import Status
+    from pyroml.loop import Loop
 
 log = get_logger(__name__)
 
@@ -30,20 +30,20 @@ class Tqdm(_tqdm):
 
 
 class TQDMProgress(BaseProgress):
-    def __init__(self, stack_bars: bool = True):
+    def __init__(self, stack_bars: bool = True) -> None:
         super().__init__(stack_bars=stack_bars, rich_colors=False)
         self.bars: dict[int, "TqdmType"] = {}
 
     @override
-    def setup(self):
+    def setup(self) -> None:
         self.bars = {}
 
     @override
-    def add_task(self, status: "Status", total: int, desc: str = None) -> int:
+    def add_task(self, loop: "Loop", total: int, desc: Optional[str] = None) -> int:
         task = len(self.bars)
         bar: "TqdmType" = Tqdm(
             desc=desc,
-            leave=self.stack_bars or status.stage == Stage.TRAIN,
+            leave=self.stack_bars or loop.stage == Stage.TRAIN,
             total=total,
             position=task,
             dynamic_ncols=True,
@@ -53,7 +53,7 @@ class TQDMProgress(BaseProgress):
         return task
 
     @override
-    def reset_task(self, task: int, total: int, desc: str = None):
+    def reset_task(self, task: int, total: int, desc: Optional[str] = None):
         bar = self.bars[task]
         bar.reset(total)
         bar.initial = 0

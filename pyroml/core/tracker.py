@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING
+import warnings
+from typing import TYPE_CHECKING, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,7 +13,6 @@ from pyroml.utils.log import get_logger
 
 if TYPE_CHECKING:
     from pyroml.callbacks.callback import CallbackArgs
-    from pyroml.core.status import Status
 
 log = get_logger(__name__)
 
@@ -39,9 +39,8 @@ def detach(x: float | np.ndarray | torch.Tensor) -> float | np.ndarray:
 
 
 class MetricsTracker(Callback):
-    def __init__(self, status: "Status"):
+    def __init__(self) -> None:
         super().__init__()
-        self.global_status = status
         self.records = pd.DataFrame(
             {
                 "stage": pd.Series([], dtype="str"),
@@ -54,17 +53,17 @@ class MetricsTracker(Callback):
 
     def _register_metrics(
         self, metrics: dict[str, float | np.ndarray], args: "CallbackArgs"
-    ) -> dict[str, float]:
+    ):
         for col in metrics.keys():
             if col not in self.records.columns:
                 self.records[col] = np.nan
 
-        metrics["stage"] = args.status.stage.value
-        metrics["epoch"] = args.status.epoch
+        metrics["stage"] = args.loop.stage.value
+        metrics["epoch"] = args.loop.epoch
 
         self.records.loc[len(self.records)] = metrics
 
-    def log(self, **data: dict[str, float | np.ndarray | torch.Tensor]):
+    def log(self, **data: float | np.ndarray | torch.Tensor):
         data = {k: detach(v) for k, v in data.items()}
         self._current_step_metrics.update(data)
 
@@ -104,12 +103,13 @@ class MetricsTracker(Callback):
     # =================== epoch_end ===================
 
     def _on_epoch_end(self, args: "CallbackArgs"):
+        print("_on_epoch_end", args)
         """
         Compute epoch metrics as the average over the current epoch
         """
         metrics = self.records[
-            (self.records["stage"] == args.status.stage.value)
-            & (self.records["epoch"] == args.status.epoch)
+            (self.records["stage"] == args.loop.stage.value)
+            & (self.records["epoch"] == args.loop.epoch)
         ].copy()
 
         metrics.drop(
@@ -145,7 +145,7 @@ class MetricsTracker(Callback):
     def _on_iter_end(self, args: "CallbackArgs") -> dict[str, float]:
         metrics = self._current_step_metrics
         metrics = {k: detach(v) for k, v in metrics.items()}
-        metrics["step"] = args.status.step
+        metrics["step"] = args.loop.step
         self._register_metrics(metrics, args)
         return metrics
 
@@ -177,8 +177,8 @@ class MetricsTracker(Callback):
 
     def plot(
         self,
-        stage: "Stage" = None,
-        plot_keys: list[str] = None,
+        stage: Optional["Stage"] = None,
+        plot_keys: Optional[list[str]] = None,
         epoch: bool = False,
         kind: str = "line",
         # grouped: bool = True,
@@ -194,16 +194,21 @@ class MetricsTracker(Callback):
             else self.records["stage"].unique().tolist()
         )
 
-        plot_keys = set(plot_keys or self.records.columns)
-        plot_keys -= set(["stage", "step", "epoch"])
-        plot_keys = sorted(plot_keys)
-
+        plot_keys = sorted(
+            set(plot_keys or self.records.columns) - set(["stage", "step", "epoch"])
+        )
         records = self.get_epoch_records() if epoch else self.get_step_records()
+
+        if len(records) == 0:
+            warnings.warn("Attempting to plot tracker records with 0 entries")
+            return
 
         # Since step counter is reset every epoch, we prevent plotting the step metrics over each other
         # By overriding the step column
         if not epoch:
-            records["step"] = np.arange(len(records))
+            for s in records["stage"].unique():
+                mask = records["stage"] == s
+                records.loc[mask, "step"] = np.arange(len(records[mask]))
 
         nrows = len(stages)
         ncols = len(plot_keys)

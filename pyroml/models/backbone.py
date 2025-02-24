@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any
+from typing import Optional
 
 import safetensors.torch as st
 import timm
@@ -13,13 +13,14 @@ class BackboneNotFoundException(Exception):
     pass
 
 
-def list_available() -> list[str]:
+def list_available() -> set[str]:
+    models: list[str]
     models = torch.hub.list("pytorch/vision")
     try:
         import timm
 
-        models += timm.list_models()
-    except Exception:
+        models = models + timm.list_models()
+    except ImportError:
         pass
 
     return set(models)
@@ -55,7 +56,7 @@ class TimmFeatureExtractor(TimmModule):
         self.out_indices = out_indices
         self._compute_last_dim(image_size)
 
-    def _compute_last_dim(self, image_size: int):
+    def _compute_last_dim(self, image_size: tuple[int, int, int]):
         o: torch.Tensor = self.model(torch.randn(1, *image_size))
         self.feature_dims = {
             self.layers[i]: x.shape for i, x in zip(self.out_indices, o)
@@ -81,7 +82,7 @@ class TimmBackbone(TimmModule):
         super().__init__(model=model, feature_info=model.feature_info)
         self.last_dim = self._compute_last_dim(image_size)
 
-    def _compute_last_dim(self, image_size: int):
+    def _compute_last_dim(self, image_size: tuple[int, int, int]):
         out: torch.Tensor = self.model(torch.randn(1, *image_size))
         self.last_dim = out[0].shape
         return self.last_dim
@@ -96,16 +97,16 @@ class Backbone:
     """
 
     @staticmethod
-    def _load_torch_cp(model: "nn.Module", path: Path):
-        cp = torch.load(str(path), map_location=torch.device("cpu"), weights_only=True)
+    def _load_torch_cp(model: "nn.Module", path: Path | str):
+        cp = st.load_file(path, device="cpu")
         if "state_dict" in cp:
             cp = cp["state_dict"]
 
         # From timm
         if "model" in cp:
-            cp: dict[str, Any] = cp["model"]
+            model_cp = cp["model"]
             cp_ = {}
-            for k, v in cp.items():
+            for k, v in model_cp.items():
                 cp_[k.replace("module.", "")] = v
             cp = cp_
 
@@ -115,8 +116,8 @@ class Backbone:
     def _load_pretrained(
         model: "nn.Module",
         name: Path | str,
-        checkpoint_folder: str | Path = None,
-        checkpoint_path: str | Path = None,
+        checkpoint_folder: Optional[str | Path] = None,
+        checkpoint_path: Optional[str | Path] = None,
         use_safetensors: bool = True,
     ):
         if checkpoint_path is not None:
@@ -137,15 +138,15 @@ class Backbone:
     @staticmethod
     def load(
         name: str,
-        num_classes=0,
-        global_pool=None,
-        layers: list[int] | None = None,
+        num_classes: Optional[int] = 0,
+        global_pool: Optional[nn.Module] = None,
+        layers: Optional[list[int]] = None,
         pre_trained: bool = True,
-        checkpoint_folder: str | Path = None,
-        checkpoint_path: str | Path = None,
+        checkpoint_folder: Optional[str | Path] = None,
+        checkpoint_path: Optional[str | Path] = None,
         use_safetensors: bool = True,
-        image_size: tuple[int, int, int] | None = (3, 256, 256),
-        cache_dir: str | None = None,
+        image_size: Optional[tuple[int, int, int]] = (3, 256, 256),
+        cache_dir: Optional[str] = None,
         **kwargs,
     ):
         """

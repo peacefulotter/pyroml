@@ -13,7 +13,7 @@ log = get_logger(__name__)
 
 
 class Autocast(AbstractContextManager):
-    def __init__(self, trainer: "Trainer"):
+    def __init__(self, trainer: "Trainer") -> None:
         device_type = trainer.device
         if device_type == "auto":
             device_type = "cuda" if torch.cuda.is_available() else "cpu"

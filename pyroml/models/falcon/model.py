@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -17,6 +17,10 @@ if TYPE_CHECKING:
     from pyroml.loop import Loop
 
 
+class MissingOptimizerException(Exception):
+    pass
+
+
 class Falcon(p.PyroModule):
     def __init__(
         self,
@@ -26,7 +30,7 @@ class Falcon(p.PyroModule):
         coarse_classes: int,
         # Model
         embed_dim: int,  # Model embedding size (last layer output shape)
-        head_type: str = "Linear",
+        head_type: Literal["hypersphere", "gaussian", "student", "linear"] = "linear",
         # Training parameters
         beta_reg: float = 0.1,
         time_limit: float = 30,  # in seconds
@@ -73,7 +77,7 @@ class Falcon(p.PyroModule):
         x = self.backbone(x)
         return x
 
-    def configure_optimizers(self, _: "Loop"):
+    def configure_optimizers(self, loop: "Loop"):
         self.optimizer = torch.optim.SGD(
             self.parameters(),
             lr=0.1,
@@ -85,7 +89,7 @@ class Falcon(p.PyroModule):
             self.optimizer, T_0=30, eta_min=0.001
         )
         self.scaler = torch.amp.GradScaler(
-            device=self.trainer.device, enabled=self.trainer.dtype == torch.float16
+            device=loop.trainer.device, enabled=loop.trainer.dtype == torch.float16
         )
 
     def on_train_start(self, _: "CallbackArgs"):
@@ -135,6 +139,9 @@ class Falcon(p.PyroModule):
         self.scheduler.step()
 
     def _fit(self, loss: torch.Tensor):
+        assert self.optimizer is not None, MissingOptimizerException(
+            "You need to assign an Optimizer to Falcon model."
+        )
         self.optimizer.zero_grad()
         self.scaler.scale(loss).backward()
         self.scaler.step(self.optimizer)

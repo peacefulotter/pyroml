@@ -1,13 +1,11 @@
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset, RandomSampler
 
 from pyroml.callbacks import Callback, CallbackArgs
 from pyroml.core.stage import Stage
 from pyroml.core.status import Status
-from pyroml.core.tracker import MetricsTracker
 from pyroml.utils.device import to_device
 from pyroml.utils.log import get_logger
 
@@ -19,21 +17,19 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 
-class Loop(Callback):
+class Loop(Callback, Status):
     def __init__(
         self, trainer: "Trainer", model: "PyroModule", dataset: Dataset
     ) -> None:
+        Status.__init__(self)
         self.trainer = trainer
         self.model = model
-
-        self.status = Status(loop=self)
-        self.tracker = MetricsTracker(status=self.status)
 
         # Callbacks, in order of execution
         # Tracker is first to expose metrics to other callbacks
         self.callbacks: list[Callback] = [
             self,
-            self.tracker,
+            trainer.tracker,
             self.model,
             *trainer.callbacks,
         ]
@@ -57,10 +53,6 @@ class Loop(Callback):
 
         self.steps_per_epoch: int = len(self.loader)
         self.total_steps: int = self._estimate_number_steps(self.loader)
-
-    @property
-    def stage(self) -> "Stage":
-        raise NotImplementedError
 
     @property
     def max_steps(self) -> int:
@@ -90,35 +82,26 @@ class Loop(Callback):
     def dataset(self) -> Dataset:
         return self.loader.dataset
 
-    def log(self, **data: dict[str, float | np.ndarray | torch.Tensor]):
-        return self.tracker.log(**data)
-
-    def before_step(self):
-        pass
-
     def after_step(self, output: torch.Tensor | Any):
-        pass
-
-    def after_epoch(self):
         pass
 
     def _get_callback_args(self):
         return CallbackArgs(
-            trainer=self.trainer,
             loop=self,
             model=self.model,
-            status=self.status,
+            trainer=self.trainer,
+            tracker=self.trainer.tracker,
         )
 
     def _trigger_callback(
         self, hook_name: str, stage_independent: bool = False
     ) -> None:
         args = self._get_callback_args()
+        print(hook_name, self, args.loop)
         hook_name = (
             f"on{'' if stage_independent else '_' + self.stage.value}_{hook_name}"
         )
         for cb in self.callbacks:
-            cb: "Callback"
             log.debug(f"Triggering callback {hook_name} for {cb} with args {args}")
             cb._call_event(hook_name, args)
 
@@ -142,7 +125,10 @@ class Loop(Callback):
         self._trigger_callback("epoch_start")
 
         while True:
-            if self.status.step > self.total_steps:
+            if self.step > self.total_steps:
+                # Reached the end of an epoch implicitely (without exception from requesting the next batch)
+                if self.step % len(self.loader) == 0:
+                    self._trigger_callback("epoch_end")
                 break
 
             # --- Request next batch
@@ -152,19 +138,16 @@ class Loop(Callback):
             except StopIteration:
                 # --- Epoch ends
                 self._trigger_callback("epoch_end")
-                self.after_epoch()
 
-                if self.max_epochs is not None and self.status.epoch >= self.max_epochs:
+                if self.max_epochs is not None and self.epoch >= self.max_epochs:
                     break
 
                 data_iter = iter(self.loader)
                 batch = next(data_iter)
 
                 # --- Epoch starts
-                self.status.advance_epoch()
+                self.advance_epoch()
                 self._trigger_callback("epoch_start")
-
-            self.before_step()
 
             # --- Iteration starts
             self._trigger_callback("iter_start")
@@ -178,19 +161,23 @@ class Loop(Callback):
 
             # --- Iteration ends
             self._trigger_callback("iter_end")
-            self.status.advance_step()
+            self.advance_step()
 
         self._trigger_callback("end")
 
         # Move model back to CPU only if no other loop is queued
-        if self.trainer.status_stack_empty:
+        # This prevents the model from being moved back and forth
+        # between cpu and cuda when alternating between different stages
+        # e.g. train -> validation -> train ...
+        if len(self.trainer._status_stack) == 1:
             self.model.cpu()
 
-        return self.tracker
+        return self.trainer.tracker
 
     def run(self):
         try:
             return self._run()
         except Exception as e:
             self._trigger_callback("exception", stage_independent=True)
+            self.model.cpu()
             raise e

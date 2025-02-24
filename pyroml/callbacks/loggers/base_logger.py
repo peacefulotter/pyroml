@@ -1,8 +1,8 @@
 import os
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
+
 from pyroml.callbacks.callback import Callback
 from pyroml.utils.classes import get_classname
-
 
 if TYPE_CHECKING:
     from pyroml.callbacks import CallbackArgs
@@ -47,13 +47,13 @@ class BaseLogger(Callback):
     # =================== iter_end ===================
 
     def on_train_iter_end(self, args: "CallbackArgs"):
-        metrics = args.loop.tracker.get_last_step_metrics()
+        metrics = args.tracker.get_last_step_metrics()
         self.log(args=args, metrics=metrics, on_epoch=False)
 
     # =================== epoch_end ===================
 
     def _on_epoch_end(self, args: "CallbackArgs"):
-        metrics = args.loop.tracker.get_last_epoch_metrics()
+        metrics = args.tracker.get_last_epoch_metrics()
         self.log(args=args, metrics=metrics, on_epoch=True)
 
     def on_train_epoch_end(self, args: "CallbackArgs"):

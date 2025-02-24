@@ -1,9 +1,9 @@
-import numpy as np
 import networkx as nx
+import numpy as np
 
 try:
     import gmatch4py as gm
-except:
+except Exception:
     import warnings
 
     warnings.warn("gmatch4py is not installed, Falcon compute_ged wont work")
@@ -19,7 +19,6 @@ def make_adjacency_matrix(M):
 
 
 def compute_ged(gt_pred, gt_graph):
-
     G_pred = nx.from_numpy_array(gt_pred)
     G_actual = nx.from_numpy_array(gt_graph)
 

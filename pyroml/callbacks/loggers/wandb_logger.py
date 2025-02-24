@@ -20,7 +20,9 @@ if TYPE_CHECKING:
 class WandBLogger(BaseLogger):
     def __init__(self, project_name: str):
         if not WANDB_AVAILABLE:
-            raise "WandB is not installed but is needed for using WandbLogger, please: pip install wandb"
+            raise Exception(
+                "WandB is not installed but is needed for using WandbLogger, please: pip install wandb"
+            )
         super().__init__(project_name=project_name, env_key="WANDB_PROJECT")
 
     def _get_attr_names(self, model: "PyroModule"):
@@ -48,7 +50,7 @@ class WandBLogger(BaseLogger):
         wandb_config.update(attr_names)
 
         wandb.init(
-            project=self.wandb_project,
+            project=self.project_name,
             name=run_name,
             config=wandb_config,
         )
@@ -58,19 +60,19 @@ class WandBLogger(BaseLogger):
         # NOTE: is this necessary? : wandb.define_metric("eval", step_metric="iter")
 
     def log(self, args: "CallbackArgs", metrics: dict[str, float], on_epoch=True):
-        status = args.status
+        loop = args.loop
 
         # TODO: add time
         # payload["time"] = time.time() - self.start_time
         # payload["dt_time"] = self.cur_time - old_time
 
         payload = {
-            f"{status.stage.to_prefix()}/{'epoch-' if on_epoch else ''}{k}": v
+            f"{loop.stage.to_prefix()}/{'epoch-' if on_epoch else ''}{k}": v
             for k, v in metrics.items()
         }
 
         # Add status to payload
-        status_dict = status.to_dict(json=True)
+        status_dict = loop.to_status_dict(json=True)
         status_dict.pop("stage")
         status_dict.pop("epoch")
         if on_epoch:

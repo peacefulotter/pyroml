@@ -1,7 +1,6 @@
 import warnings
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
-import pandas as pd
 import torch
 from torch.utils.data import Dataset
 from typing_extensions import override
@@ -23,7 +22,7 @@ class TrainLoop(Loop):
         trainer: "Trainer",
         model: "PyroModule",
         dataset: Dataset,
-        ev_dataset: Dataset = None,
+        ev_dataset: Optional[Dataset] = None,
     ):
         super().__init__(trainer=trainer, model=model, dataset=dataset)
         self.ev_dataset = ev_dataset
@@ -58,33 +57,23 @@ class TrainLoop(Loop):
         return self.trainer.num_workers
 
     def evaluate(self):
-        ev_tracker = self.trainer.evaluate(model=self.model, dataset=self.ev_dataset)
-
-        # Save recorded validation metrics to training records
-        eval_records = ev_tracker.records
-        eval_records["epoch"] = self.status.epoch
-        self.tracker.records = pd.concat(
-            objs=(self.tracker.records, eval_records), ignore_index=True
-        )
-
-        # Reset trainer loop to self
-        self.trainer.loop = self
+        self.trainer.evaluate(model=self.model, dataset=self.ev_dataset)
 
     @override
-    def before_step(self):
+    def on_train_iter_end(self):
         if (
             self.evaluate_enabled
             and self.trainer.evaluate_on == "step"
-            and self.status.step % self.trainer.evaluate_every == 0
+            and self.step % self.trainer.evaluate_every == 0
         ):
             self.evaluate()
 
     @override
-    def after_epoch(self):
+    def on_train_epoch_end(self, _):
         if (
             self.evaluate_enabled
             and self.trainer.evaluate_on == "epoch"
-            and self.status.epoch % self.trainer.evaluate_every == 0
+            and self.epoch % self.trainer.evaluate_every == 0
         ):
             self.evaluate()
 
@@ -95,10 +84,12 @@ class TrainLoop(Loop):
     @override
     def _run(self):
         # TODO: add way to evaluate before training and save eval progress bar
+        # Probably want to add a sanitize loop
         # if self.evaluate_enabled:
         #    self.evaluate()
 
         self.model.configure_optimizers(self)
         self.model.train()
-
-        return super()._run()
+        res = super()._run()
+        self.model.eval()
+        return res

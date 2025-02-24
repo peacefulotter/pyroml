@@ -1,13 +1,15 @@
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
+import safetensors.torch as st
 import torch
 
 from pyroml.utils import get_classname
+from pyroml.utils.date import get_date
 from pyroml.utils.log import get_logger
 
 if TYPE_CHECKING:
-    from pyroml.core.trainer import Trainer
+    pass
 
 
 class UndefinedFolder(Exception):
@@ -30,33 +32,15 @@ log = get_logger(__name__)
 
 
 class WithHyperParameters:
-    def __init__(self, hparams_file: Path | str, **kwargs):
-        super().__init__(**kwargs)
-        assert hparams_file is not None, (
-            "hparams_file in WithHyperParameters class is not set properly"
-        )
+    def __init__(self, hparams_file: Path | str) -> None:
         self.hparams_file = hparams_file
-        self.hparams: set[str] = set()
+        self._hparams: set[str] = set()
 
-    def _resolve_hparams_folder(self, folder: Path | str | None = None):
-        if folder is not None:
-            return folder
-        elif isinstance(self, Trainer):
-            return self.checkpoint_folder
-        elif hasattr(self, "trainer"):
-            trainer: "Trainer" = self.trainer
-            return trainer.checkpoint_folder
-        raise UndefinedFolder(
-            "Attempting to save/load hyperparameters without a trainer assigned, a checkpoint folder must be specified"
-        )
-
-    def _resolve_hparams_file(self, file: Path | str = None):
+    def _resolve_hparams_file(self, file: Optional[Path | str] = None) -> Path | str:
         return file or self.hparams_file
 
-    def _resolve_path(self, folder=None, file=None):
-        folder = self._resolve_hparams_folder(folder=folder)
-        file = self._resolve_hparams_file(file=file)
-        return Path(folder) / Path(file)
+    def _resolve_path(self, folder: Path | str, file: Optional[Path | str] = None):
+        return Path(folder) / self._resolve_hparams_file(file=file)
 
     def register_hparams(self, *hparams_attributes):
         for attr in hparams_attributes:
@@ -67,11 +51,11 @@ class WithHyperParameters:
                 msg = f"The attribute {attr} is not in {self}"
                 raise AttributeNotFound(msg)
 
-            self.hparams.add(attr)
+            self._hparams.add(attr)
 
-    def save_hparams(self, folder=None, file=None):
-        hparams = {}
-        for attr in self.hparams:
+    def save_hparams(self, folder: Path | str, file: Optional[Path | str] = None):
+        hparams = {"date": get_date()}
+        for attr in self._hparams:
             hparams[attr] = self.__getattribute__(attr)
 
         f = self._resolve_path(folder=folder, file=file)
@@ -81,7 +65,7 @@ class WithHyperParameters:
     @staticmethod
     def _load_hparams(f: Path):
         log.info(f"Loading hyperparameters from {f}")
-        hparams = torch.load(f, map_location="cpu")
+        hparams = st.load_file(f, device="cpu")
 
         if not isinstance(hparams, dict):
             raise UnexpectedFileContent(
@@ -90,7 +74,7 @@ class WithHyperParameters:
 
         return hparams
 
-    def load_hparams(self, folder=None, file=None):
+    def load_hparams(self, folder: Path | str, file: Optional[Path | str] = None):
         f = self._resolve_path(folder=folder, file=file)
         hparams = WithHyperParameters._load_hparams(f)
         for attr, val in hparams.items():

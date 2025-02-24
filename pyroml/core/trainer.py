@@ -1,9 +1,8 @@
 import logging
 import os
-import time
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional, Type
 
 import numpy as np
 import pandas as pd
@@ -13,24 +12,20 @@ from torch.utils.data import Dataset
 from pyroml.core.autocast import Autocast
 from pyroml.core.hparams import WithHyperParameters
 from pyroml.core.model import PyroModule
+from pyroml.core.tracker import MetricsTracker
 from pyroml.loop import EvalLoop, PredictLoop, TrainLoop
 from pyroml.utils import get_classname
 from pyroml.utils.log import get_logger, set_level_all_loggers
 
 if TYPE_CHECKING:
-    from pyroml.core.status import Status
     from pyroml.callbacks import Callback
-    from pyroml.core.tracker import MetricsTracker
+    from pyroml.core.status import Status
     from pyroml.loop.base import Loop
 
 log = get_logger(__name__)
 
 TRAINER_STATE_FILE = "trainer_state.pt"
 TRAINER_HPARAMS_FILE = "trainer_hparams.json"
-
-
-def get_date() -> str:
-    return time.strftime("%Y-%m-%d_%H:%M", time.gmtime(time.time()))
 
 
 class NotAPyroModuleException(Exception):
@@ -41,25 +36,25 @@ class Trainer(WithHyperParameters):
     def __init__(
         self,
         lr: float = 1e-4,
-        max_epochs: int | None = 8,
-        max_steps: int | None = None,
+        max_epochs: Optional[int] = 8,
+        max_steps: Optional[int] = None,
         grad_norm_clip: float = 1.0,
         evaluate_on: Literal["step", "epoch", False] = "epoch",
         evaluate_every: int = 1,
-        eval_max_steps: int | None = None,
+        eval_max_steps: Optional[int] = None,
         device: str | torch.device = "auto",
         auto_move: bool = True,
-        pin_memory: bool | None = None,
+        pin_memory: Optional[bool] = None,
         dtype: torch.dtype = torch.float32,
         compile: bool = False,
         hparams_file: str | Path = TRAINER_HPARAMS_FILE,
         batch_size: int = 16,
-        eval_batch_size: int = None,
+        eval_batch_size: Optional[int] = None,
         num_workers: int = 0,
         eval_num_workers: int = 0,
         log_level: int = logging.INFO,
         callbacks: list["Callback"] = [],
-    ):
+    ) -> None:
         """
         Trainer class specifying all training related parameters and exposing fit / test methods to interact with the model.
 
@@ -166,7 +161,7 @@ class Trainer(WithHyperParameters):
         self.device = device
         self.compile = compile
         self.version = -1
-        self.model: "PyroModule" | torch._dynamo.OptimizedModule = None
+        self.model: Optional["PyroModule" | torch._dynamo.OptimizedModule] = None
 
         # Data
         self.batch_size = batch_size
@@ -178,22 +173,17 @@ class Trainer(WithHyperParameters):
         self.log_level = log_level
 
         # Device and dtypes
-        self.autocast = Autocast(self)
-        self.auto_move = auto_move
-        self.pin_memory = pin_memory
+        self.autocast: Autocast = Autocast(self)
+        self.auto_move: bool = auto_move
+        self.pin_memory: Optional[bool] = pin_memory
 
-        self.date: str
-        self.loop: "Loop"
         self._status_stack: list["Status"] = []
 
-    @property
-    def status_stack_empty(self):
-        return len(self._status_stack) <= 1
+        self.tracker: MetricsTracker = MetricsTracker()
 
     @property
-    def current_status(self):
-        # TODO: define NOTHING status
-        return self._status_stack[-1] if len(self._status_stack) > 0 else Status.NO_OP
+    def current_status(self) -> Optional["Status"]:
+        return self._status_stack[-1] if len(self._status_stack) > 0 else None
 
     @property
     def eval_enabled(self):
@@ -204,49 +194,54 @@ class Trainer(WithHyperParameters):
             and (self.eval_batch_size is None or self.eval_batch_size > 0)
         )
 
-    def log(self, **data: dict[str, float | np.ndarray | torch.Tensor]):
-        assert self.loop is not None
-        return self.loop.log(**data)
+    def log(self, **data: float | np.ndarray | torch.Tensor):
+        return self.tracker.log(**data)
 
-    def _setup(self):
-        self.date = get_date()
-        self.loop: "Loop" = None
+    @property
+    def log_level(self):
+        return self._log_level
 
-        set_level_all_loggers(level=self.log_level)
+    @log_level.setter
+    def log_level(self, level):
+        set_level_all_loggers(level=level)
+        self._log_level = level
 
     def _setup_model(self, model: "PyroModule"):
         self.model = model
 
-        # Compile model if requested, should improve performance
+        # Compile model if requested, should improve performance for inference
         if self.compile:
             self.model.compile()
 
         self.model._setup(self)
 
     def _call_loop(
-        self, Loop: "Loop", model: "PyroModule", dataset: Dataset, **kwargs
+        self, Loop: Type["Loop"], model: "PyroModule", dataset: Dataset, **kwargs
     ) -> pd.DataFrame:
         """ "
         Setups the trainer and model and
         Calls a loop with the specified model and dataset.
         """
-        if not isinstance(model, PyroModule) and (
-            not isinstance(model, torch._dynamo.OptimizedModule)
-            or not isinstance(model._orig_mod, PyroModule)
+        if not isinstance(model, PyroModule) or (
+            isinstance(model, torch._dynamo.OptimizedModule)
+            and isinstance(model._orig_mod, PyroModule)
         ):
-            raise NotAPyroModuleException("Trainer: model must be a PyroModule")
+            raise NotAPyroModuleException(
+                "Trainer runs loops with a model that must be a PyroModule"
+            )
 
-        self._setup()
-        self.loop: "Loop" = Loop(model=model, trainer=self, dataset=dataset, **kwargs)
+        loop = Loop(model=model, trainer=self, dataset=dataset, **kwargs)
         self._setup_model(model)
-        # TODO: don't hold self.loop, but rather expose self.current_status
-        self._status_stack.append(self.loop.status)
-        res = self.loop.run()
+        self._status_stack.append(loop)
+        res = loop.run()
         self._status_stack.pop()
         return res
 
     def fit(
-        self, model: "PyroModule", tr_dataset: Dataset, ev_dataset: Dataset = None
+        self,
+        model: "PyroModule",
+        tr_dataset: Dataset,
+        ev_dataset: Optional[Dataset] = None,
     ) -> "MetricsTracker":
         return self._call_loop(
             Loop=TrainLoop, model=model, dataset=tr_dataset, ev_dataset=ev_dataset
@@ -266,15 +261,22 @@ class Trainer(WithHyperParameters):
         file: Path | str = TRAINER_STATE_FILE,
     ) -> None:
         # Saving state
-        state = {
-            "compiled": self.model._is_compiled(),
-            "optimizer_name": get_classname(self.model.optimizer),
-            "optimizer": self.model.optimizer.state_dict(),
-        }
+        state = {}
 
-        if hasattr(self.model, "scheduler"):
-            state["scheduler_name"] = get_classname(self.model.scheduler)
-            state["scheduler"] = self.model.scheduler.state_dict()
+        if self.model is not None:
+            state["compiled"] = self.model._is_compiled()
+
+            if self.model.optimizer is not None:
+                state.update(
+                    {
+                        "optimizer_name": get_classname(self.model.optimizer),
+                        "optimizer": self.model.optimizer.state_dict(),
+                    }
+                )
+
+            if hasattr(self.model, "scheduler") and self.model.scheduler is not None:
+                state["scheduler_name"] = get_classname(self.model.scheduler)
+                state["scheduler"] = self.model.scheduler.state_dict()
 
         folder = Path(folder)
         os.makedirs(folder, exist_ok=True)

@@ -1,7 +1,9 @@
 from pathlib import Path
 
 import numpy as np
+import safetensors.torch as st
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 from tqdm import tqdm
@@ -21,7 +23,7 @@ def _neighbors_path(dataset: Dataset, backbone: str, num_neighbors: int):
     )
 
 
-def gather_representations(loader, model):
+def gather_representations(model: nn.Module, loader):
     num_samples = len(loader.dataset)
     actual = torch.zeros(num_samples, dtype=torch.long)
     actual_coarse = torch.zeros(num_samples, dtype=torch.long)
@@ -49,18 +51,21 @@ def gather_representations(loader, model):
     return feats, actual, actual_coarse
 
 
-def neighours_with_coarse(backbone: str, dataset: Dataset, num_neighbors: int):
+def neighours_with_coarse(
+    backbone: str, dataset: Dataset, num_neighbors: int, use_faiss: bool = True
+):
     _FAISS_AVAILABLE = False
     try:
         import faiss
 
         _FAISS_AVAILABLE = True
-    except Exception:
+    except ImportError:
         pass
 
     model = Backbone.load(backbone, pre_trained=True)
     model.eval()
-    feats, actual, actual_coarse = gather_representations(loader, model)
+    loader = None
+    feats, actual, actual_coarse = gather_representations(model, loader)
 
     neighbors = torch.zeros((feats.shape[0], num_neighbors), dtype=torch.long)
     indices = torch.arange(feats.shape[0])
@@ -68,7 +73,7 @@ def neighours_with_coarse(backbone: str, dataset: Dataset, num_neighbors: int):
     for coarse_y in bar:
         coarse_indices = indices[actual_coarse == coarse_y]
 
-        if _FAISS_AVAILABLE:
+        if use_faiss and _FAISS_AVAILABLE:
             faiss_index = faiss.IndexFlatIP(feats.shape[-1])
             faiss_index.add(feats[actual_coarse == coarse_y].numpy())
             neighbors[actual_coarse == coarse_y] = coarse_indices[
@@ -91,9 +96,11 @@ def neighours_with_coarse(backbone: str, dataset: Dataset, num_neighbors: int):
     return neighbors, neighbors_classes, actual
 
 
-def _compute_neighbors(dataset: Dataset, num_neighbors: int):
+def _compute_neighbors(
+    dataset: Dataset, backbone: str, num_neighbors: int, use_faiss: bool = True
+):
     neighbors_with_coarse, neighbors_classes_with_coarse, actual = (
-        neighours_with_coarse(model, train_loader, num_neighbors, cfg.USE_FAISS)
+        neighours_with_coarse(backbone, dataset, num_neighbors, use_faiss)
     )
     correct_neighbors_with_coarse_percentage = (
         (actual.unsqueeze(1).repeat(1, num_neighbors) == neighbors_classes_with_coarse)
@@ -108,21 +115,34 @@ def _compute_neighbors(dataset: Dataset, num_neighbors: int):
 
 
 def _load_or_compute_neighbors(
-    dataset: Dataset, backbone, num_neighbors: int
+    dataset: Dataset, backbone: str, num_neighbors: int, use_faiss: bool = True
 ) -> torch.Tensor:
     path = _neighbors_path(dataset, backbone, num_neighbors)
     try:
-        return torch.load(path)
+        return st.load_file(path)
     except FileNotFoundError:
-        neighbors = _compute_neighbors(dataset, backbone, num_neighbors)
+        neighbors = _compute_neighbors(
+            dataset=dataset,
+            backbone=backbone,
+            num_neighbors=num_neighbors,
+            use_faiss=use_faiss,
+        )
         torch.save(neighbors, path)
         return neighbors
 
 
 class NeighborsWrapper(Dataset):
-    def __init__(self, dataset: Dataset, backbone: str, num_neighbors: int):
+    def __init__(
+        self,
+        dataset: Dataset,
+        backbone: str,
+        num_neighbors: int,
+        use_faiss: bool = True,
+    ):
         self.dataset = dataset
-        self.neighbors = _load_or_compute_neighbors(dataset, backbone, num_neighbors)
+        self.neighbors = _load_or_compute_neighbors(
+            dataset, backbone, num_neighbors, use_faiss=use_faiss
+        )
         self.num_neighbors = num_neighbors
         assert num_neighbors <= self.neighbors.shape[-1]
 

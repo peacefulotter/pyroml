@@ -1,23 +1,21 @@
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pyroml.core.stage import Stage
-    from pyroml.loop.base import Loop
 
 
 class Status:
-    def __init__(self, loop: "Loop"):
-        self.loop = loop
+    def __init__(self):
         self.epoch = 1
         self.step = 1
 
     @property
     def stage(self) -> "Stage":
-        return self.loop.stage
+        raise NotImplementedError
 
-    def to_dict(self, json: bool = False) -> dict[str, Any]:
+    def to_status_dict(self, json: bool = False) -> dict[str, Any]:
         d = dict(
-            stage=self.loop.stage,
+            stage=self.stage,
             epoch=self.epoch,
             step=self.step,
         )

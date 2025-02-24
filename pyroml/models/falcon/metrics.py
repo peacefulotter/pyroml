@@ -1,8 +1,8 @@
-import torch
 import numpy as np
-
+import torch
 from scipy.optimize import linear_sum_assignment
-from sklearn.metrics import normalized_mutual_info_score, adjusted_rand_score
+from sklearn.metrics import adjusted_rand_score as ars
+from sklearn.metrics import normalized_mutual_info_score as nmif
 
 
 def cluster_acc(y_pred: torch.Tensor, y_true: torch.Tensor) -> float:
@@ -31,11 +31,11 @@ def accuracy(y_pred: torch.Tensor, y_true: torch.Tensor) -> float:
 
 
 def macro_accuracy(
-    y_pred: torch.Tensor, y_true: torch.Tensor, return_class_accuracies=False
-) -> float:
+    y_pred: torch.Tensor, y_true: torch.Tensor
+) -> tuple[float, list[float]]:
     unique_classes = np.unique(y_true)
 
-    class_accuracies = []
+    class_accuracies: list[float] = []
     for cls in unique_classes:
         class_indices = np.where(y_true == cls)
         class_true = y_true[class_indices]
@@ -43,10 +43,8 @@ def macro_accuracy(
 
         class_accuracy = accuracy(class_pred, class_true)
         class_accuracies.append(class_accuracy)
-    macro_accuracy = np.mean(class_accuracies)
-    if return_class_accuracies:
-        return macro_accuracy, class_accuracies
-    return macro_accuracy
+    macro_accuracy: float = np.mean(class_accuracies)
+    return macro_accuracy, class_accuracies
 
 
 def compute_matchings(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
@@ -63,11 +61,11 @@ def compute_matchings(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tenso
 
 
 def normalized_mutual_info_score(y_pred, y_true):
-    return normalized_mutual_info_score(y_pred, y_true) * 100.0
+    return nmif(y_pred, y_true) * 100.0
 
 
 def adjusted_rand_score(y_true: torch.Tensor, y_pred):
-    return adjusted_rand_score(y_true, y_pred) * 100.0
+    return ars(y_true, y_pred) * 100.0
 
 
 def cm_cluster_acc(cm: torch.Tensor):

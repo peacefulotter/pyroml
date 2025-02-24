@@ -22,13 +22,13 @@ if __name__ == "__main__":
 
     trainer = p.Trainer()
     loop = PredictLoop(trainer, model)
-    tracker = MetricsTracker(loop.status, model, trainer.loss)
+    tracker = MetricsTracker()
 
     def step(stage: Stage, epoch: int, step: int):
         batch = next(loader)
         out = model.step(batch, stage)
         tracker.step(output=out)
-        loop.status.advance_step()
+        loop.advance_step()
 
     epochs = 3
     tr_steps_per_epoch = 10
@@ -41,7 +41,7 @@ if __name__ == "__main__":
             for s in range(ev_steps_per_epoch):
                 step(Stage.VAL, e, s)
 
-            loop.status.advance_epoch()
+            loop.advance_epoch()
             tracker.on_train_epoch_end(trainer, loop)
 
     assert hasattr(tracker, "records")

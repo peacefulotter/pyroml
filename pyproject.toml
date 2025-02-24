@@ -1,3 +1,9 @@
+[build-system]
+# requires = ["setuptools>=64.0.0", "wheel"]
+# build-backend = "setuptools.build_meta"
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
 [project]
 name = "pyroml"
 version = "2.1.2"
@@ -16,6 +22,9 @@ dependencies = [
     "safetensors (>=0.5.2,<0.6.0)",
 ]
 
+[dependency-groups]
+dev = ["pre-commit>=4.1.0", "ruff>=0.9.7"]
+
 [project.optional-dependencies]
 cpu = ["torch>=2.6.0", "torchvision>=0.21.0"]
 cu124 = ["torch>=2.6.0", "torchvision>=0.21.0"]
@@ -32,8 +41,26 @@ extra = [
 ]
 full = ["pyroml[cu124,dev,test,extra]"]
 
+# =========================== ruff ===========================
+
+[tool.ruff.lint.per-file-ignores]
+"*.ipynb" = ["E402"]
+
+# ======================== setuptools ========================
+
 [tool.setuptools.dynamic]
 version = { attr = "pyroml.__version__" }
+
+# ========================== pytest ==========================
+
+[tool.pytest.ini_options]
+pythonpath = ["./tests"]
+
+# ============================ uv ============================
+
+# [project.scripts]
+# check = "scripts/check.sh"
+# test = "pytest"
 
 [tool.uv]
 conflicts = [[{ extra = 'cpu' }, { extra = 'cu124' }]]
@@ -58,6 +85,8 @@ name = 'pytorch-cu124'
 url = "https://download.pytorch.org/whl/cu124"
 explicit = true
 
+# ========================== poetry ==========================
+
 [tool.poetry.dependencies]
 python = "^3.10"
 
@@ -78,7 +107,6 @@ optional = true
 [tool.poetry.group.cuda.dependencies]
 torch = { version = "^2.6.0", source = "pytorch-cu124", markers = "extra=='cuda' and extra!='cpu'" }
 torchvision = { version = "^0.21.0", source = "pytorch-cu124", markers = "extra=='cuda' and extra!='cpu'" }
-
 
 [[tool.poetry.source]]
 name = "pytorch-cpu"
@@ -106,8 +134,3 @@ einops = "^0.8.0"
 gurobipy = "^12.0.1"
 scipy = "^1.15.1"
 scikit-learn = "^1.6.1"
-
-
-[build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"

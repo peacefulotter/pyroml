@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from typing_extensions import override
 
@@ -8,7 +8,6 @@ from pyroml.callbacks.callback import Callback
 from pyroml.utils.log import get_logger
 
 if TYPE_CHECKING:
-    from pyroml.core.status import Status
     from pyroml.callbacks.callback import CallbackArgs
     from pyroml.loop.base import Loop
 
@@ -22,10 +21,10 @@ class ColorMode(Enum):
 
 
 class BaseProgress(Callback):
-    def __init__(self, stack_bars: bool = True, rich_colors: bool = True):
+    def __init__(self, stack_bars: bool = True, rich_colors: bool = True) -> None:
         self.stack_bars = stack_bars
         self.rich_colors = rich_colors
-        self._tasks: dict["Stage", int] = {}
+        self._tasks: dict["Stage", Optional[int]] = {}
         self._val_epoch_metrics: dict[str, float] = {}
         self._progress_stopped: bool = False
 
@@ -33,13 +32,13 @@ class BaseProgress(Callback):
     def enabled(self):
         return not self._progress_stopped
 
-    def setup():
+    def setup(self) -> None:
         raise NotImplementedError()
 
-    def add_task(self, status: "Status", total: int, desc: str = None) -> int:
+    def add_task(self, loop: "Loop", total: int, desc: Optional[str] = None) -> int:
         raise NotImplementedError()
 
-    def reset_task(self, task: int, total: int, desc: str = None):
+    def reset_task(self, task: int, total: int, desc: Optional[str] = None):
         raise NotImplementedError()
 
     def end_progress_task(self, task: int, hide: bool = False):
@@ -48,7 +47,7 @@ class BaseProgress(Callback):
     def stop_progress(self):
         raise NotImplementedError()
 
-    def update_metrics(self, task: int, metrics: str, advance: int = 1):
+    def update_metrics(self, task: int, metrics: dict[str, float], advance: int = 1):
         raise NotImplementedError()
 
     def _setup(self):
@@ -62,41 +61,40 @@ class BaseProgress(Callback):
 
         log.debug("Setup done")
 
-    def get_task(self, status: "Status"):
-        return self._tasks.get(status.stage)
+    def get_task(self, loop: "Loop"):
+        return self._tasks.get(loop.stage)
 
-    def set_task(self, status: "Status", task: int):
-        self._tasks[status.stage] = task
+    def set_task(self, loop: "Loop", task: Optional[int]):
+        self._tasks[loop.stage] = task
 
     # =================== internal api ===================
 
     def _add_stage(
         self,
         loop: "Loop",
-        status: "Status",
-        desc: str = None,
+        desc: Optional[str] = None,
     ):
         assert self.enabled
-        log.debug(f"Adding stage {status.stage.value}")
+        log.debug(f"Adding stage {loop.stage.value}")
 
         total = len(loop.loader)
-        task = self.get_task(status)
+        task = self.get_task(loop)
 
         if task is not None:
             self.reset_task(task, total, desc)
         else:
-            task_id = self.add_task(status, total, desc)
-            self.set_task(status, task_id)
+            task_id = self.add_task(loop, total, desc)
+            self.set_task(loop, task_id)
 
     def _get_step_metrics(self, args: "CallbackArgs"):
-        metrics = args.loop.tracker.get_last_step_metrics()
-        if args.status.stage == Stage.TRAIN:
+        metrics = args.trainer.tracker.get_last_step_metrics()
+        if args.loop.stage == Stage.TRAIN:
             metrics.update(self._val_epoch_metrics)
         return metrics
 
     def _get_epoch_metrics(self, args: "CallbackArgs"):
-        metrics = args.loop.tracker.get_last_epoch_metrics()
-        if args.status.stage == Stage.TRAIN:
+        metrics = args.tracker.get_last_epoch_metrics()
+        if args.loop.stage == Stage.TRAIN:
             metrics.update(self._val_epoch_metrics)
         return metrics
 
@@ -136,11 +134,11 @@ class BaseProgress(Callback):
 
     def _on_epoch_start(self, desc: str, color: ColorMode, args: "CallbackArgs"):
         desc = f"[{color.value}]{desc}" if self.rich_colors else desc
-        self._add_stage(status=args.status, loop=args.loop, desc=desc)
+        self._add_stage(loop=args.loop, desc=desc)
 
     @override
     def on_train_epoch_start(self, args: "CallbackArgs"):
-        self._on_epoch_start(f"Epoch {args.status.epoch}", ColorMode.TR, args)
+        self._on_epoch_start(f"Epoch {args.loop.epoch}", ColorMode.TR, args)
 
     @override
     def on_validation_epoch_start(self, args: "CallbackArgs"):
@@ -153,7 +151,7 @@ class BaseProgress(Callback):
     # =================== iter_end ===================
 
     def _on_iter(self, args: "CallbackArgs"):
-        task = self.get_task(status=args.status)
+        task = self.get_task(loop=args.loop)
         metrics = self._get_step_metrics(args=args)
         self.update_metrics(task=task, metrics=metrics, advance=1)
 
@@ -176,12 +174,12 @@ class BaseProgress(Callback):
         args: "CallbackArgs",
         hide: bool = False,
     ):
-        task = self.get_task(status=args.status)
+        task = self.get_task(loop=args.loop)
         if not hide:
             metrics = self._get_epoch_metrics(args=args)
             self.update_metrics(task=task, metrics=metrics, advance=0)
         self.end_progress_task(task, hide)
-        self.set_task(status=args.status, task=None)
+        self.set_task(loop=args.loop, task=None)
 
     @override
     def on_train_epoch_end(self, args: "CallbackArgs"):
@@ -195,10 +193,8 @@ class BaseProgress(Callback):
         # if tr_task is not None:
 
         # Save validation epoch metrics to use for the training progress bar
-        metrics = args.loop.tracker.get_last_epoch_metrics()
-        metrics = {
-            f"{args.status.stage.to_prefix()}_{k}": v for k, v in metrics.items()
-        }
+        metrics = args.tracker.get_last_epoch_metrics()
+        metrics = {f"{args.loop.stage.to_prefix()}_{k}": v for k, v in metrics.items()}
         self._val_epoch_metrics = metrics
 
         self._on_epoch_end(args, hide=True)

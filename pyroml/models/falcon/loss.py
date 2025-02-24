@@ -13,6 +13,7 @@ from .utils import compute_assignment_from_cost, cosine_annealing, entropy
 
 if TYPE_CHECKING:
     from pyroml.callbacks.callback import CallbackArgs
+
     from .model import Falcon
 
 
@@ -44,9 +45,9 @@ class FalconLoss(nn.Module, Callback):
         self.lambda2 = loss_lambda2
         self.lambda3 = loss_lambda3
 
-        self.tau = 0
-        self.fine_preds = []
-        self.coarse_labels = []
+        self.tau = 0.0
+        self.fine_preds: list[torch.Tensor] = []
+        self.coarse_labels: list[torch.Tensor] = []
 
         self.M: torch.Tensor
 
@@ -99,9 +100,9 @@ class FalconLoss(nn.Module, Callback):
         self.M = self.compute_assignment_from_cost(cost).to(self.device)
 
     def on_train_epoch_start(self, args: "CallbackArgs"):
-        epoch: int = args.epoch
+        epoch: int = args.loop.epoch
         self.tau = (
-            cosine_annealing(1, 0.0, epoch - 1, self.soft_labels_epochs)
+            cosine_annealing(1.0, 0.0, epoch - 1, self.soft_labels_epochs)
             if epoch <= self.soft_labels_epochs
             else 0.0
         )
@@ -129,7 +130,11 @@ class FalconLoss(nn.Module, Callback):
         )
         neighbors = rearrange(neighbors, pattern)
 
-        with torch.amp.autocast(enabled=self.model.trainer.dtype == torch.bfloat16):
+        with torch.amp.autocast(
+            enabled=self.model.trainer.dtype == torch.float16
+            if self.model.trainer is not None
+            else False
+        ):
             with torch.no_grad():
                 with self.model.ema.average_parameters():
                     logits_ema: torch.Tensor = self(x_ema)
@@ -140,7 +145,7 @@ class FalconLoss(nn.Module, Callback):
                         self.fine_preds.append(ema_probs)
 
                     neighbors = neighbors.to(self.device)
-                    neighbors: torch.Tensor = self(neighbors)
+                    neighbors = self(neighbors)
                     neighbors = rearrange(
                         neighbors.softmax(-1).detach(),
                         "(n k) c -> n k c",
@@ -191,19 +196,17 @@ class FalconLoss(nn.Module, Callback):
             )
 
             self.model.log(
-                dict(
-                    loss_reg=loss_reg_fine.item(),
-                    loss_fine=loss_cls_fine.item(),
-                    loss_coarse=loss_cls_coarse.item(),
-                    loss_total=loss_cls_fine.item(),
-                )
+                loss_reg=loss_reg_fine.item(),
+                loss_fine=loss_cls_fine.item(),
+                loss_coarse=loss_cls_coarse.item(),
+                loss=loss_total.item(),
             )
 
         return loss_total
 
     def on_train_iter_end(self, args: "CallbackArgs"):
         # FIXME: doubt its on train iter end
-        step: int = args.step
+        step: int = args.loop.step
         if step > 0 and step % self.solve_every == 0:
             preds = torch.cat(self.fine_preds, dim=0).to(self.device)
             labels = torch.cat(self.coarse_labels, dim=0).to(self.device)

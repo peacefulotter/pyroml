@@ -1,7 +1,9 @@
 import os
 import re
-from typing import Literal
+import warnings
 from pathlib import Path
+from typing import Literal
+
 from pyroml.callbacks.callback import Callback, CallbackArgs
 
 
@@ -32,13 +34,16 @@ class CheckpointCallback(Callback):
     def save_checkpoints(self, args: "CallbackArgs"):
         if self.version < 0:
             self._fetch_version()
-        args.model.save()
-        args.trainer.save()
+        warnings.warn(
+            "CheckpointCallback will override previous checkpoint on all save"
+        )
+        args.model.save(folder=self.checkpoint_folder)
+        args.trainer.save(folder=self.checkpoint_folder)
 
     def on_train_iter_end(self, args):
-        if self.on == "step" and self.every % args.status.step == 0:
+        if self.on == "step" and self.every % args.loop.step == 0:
             self.save_checkpoints(args)
 
     def on_train_epoch_end(self, args):
-        if self.on == "epoch" and self.every % args.status.step == 0:
+        if self.on == "epoch" and self.every % args.loop.step == 0:
             self.save_checkpoints(args)

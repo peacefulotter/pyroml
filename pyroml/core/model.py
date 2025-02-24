@@ -1,7 +1,7 @@
 import os
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 import safetensors.torch as st
@@ -33,12 +33,16 @@ class MissingStepMethodException(Exception):
     pass
 
 
+class MissingTrainerException(Exception):
+    pass
+
+
 class PyroModule(WithHyperParameters, Callback, nn.Module):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(hparams_file=MODEL_HPARAMS_FILE)
-        self.trainer: "Trainer"
-        self.optimizer: Optimizer
-        self.scheduler: Scheduler | None
+        self.trainer: Optional["Trainer"] = None
+        self.optimizer: Optional[Optimizer] = None
+        self.scheduler: Optional[Scheduler] = None
 
     @property
     def device(self):
@@ -49,7 +53,7 @@ class PyroModule(WithHyperParameters, Callback, nn.Module):
         Define optimizer and optionally scheduler to use during training
 
         Default values:
-        - Optimizer is SGD with learning rate from trainer.lr
+        - Optimizer is AdamW with learning rate = trainer.lr
         - Scheduler is None, meaning the learning rate will be constant
 
         Note:
@@ -59,12 +63,14 @@ class PyroModule(WithHyperParameters, Callback, nn.Module):
 
         Example:
         ```
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=self.trainer.lr)
+        self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.trainer.lr)
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=1, gamma=0.1)
         ```
         """
-        tr = self.trainer
-        self.optimizer: Optimizer = torch.optim.SGD(self.parameters(), lr=tr.lr)
+        assert self.trainer is not None, MissingTrainerException(
+            "You should assign a trainer to your PyroModule before calling .configure_optimizers"
+        )
+        self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.trainer.lr)
 
     def step(
         self,
@@ -74,7 +80,10 @@ class PyroModule(WithHyperParameters, Callback, nn.Module):
         msg = "A step method must be implemented for your PyroModule model"
         raise MissingStepMethodException(msg)
 
-    def log(self, **data: dict[str, float | np.ndarray | torch.Tensor]):
+    def log(self, **data: float | np.ndarray | torch.Tensor):
+        assert self.trainer is not None, MissingTrainerException(
+            "You should assign a trainer to your PyroModule before calling .log"
+        )
         return self.trainer.log(**data)
 
     def compile(self, *args, **kwargs):
@@ -104,19 +113,22 @@ class PyroModule(WithHyperParameters, Callback, nn.Module):
 
         # 2. Clip the gradients
         if (
-            self.trainer.grad_norm_clip is not None
+            self.trainer is not None
+            and self.trainer.grad_norm_clip is not None
             and self.trainer.grad_norm_clip > 0.0
         ):
             nn.utils.clip_grad_norm_(self.parameters(), self.trainer.grad_norm_clip)
 
         # 3. Optimizer step
-        self.optimizer.step()
+        if self.optimizer is not None:
+            self.optimizer.step()
 
         # 4. Step the scheduler
         if hasattr(self, "scheduler") and self.scheduler is not None:
             self.scheduler.step()
 
-        self.optimizer.zero_grad(set_to_none=True)
+        if self.optimizer is not None:
+            self.optimizer.zero_grad(set_to_none=True)
 
     def get_current_lr(self) -> dict[str, float]:
         """
@@ -125,10 +137,14 @@ class PyroModule(WithHyperParameters, Callback, nn.Module):
         Returns:
             dict[str, float]: mapping of learning rate names to their corresponding values
         """
-        if not hasattr(self, "scheduler") or self.scheduler is None:
+        if hasattr(self, "scheduler") and self.scheduler is not None:
+            lr = float(self.scheduler.get_last_lr()[0])
+        elif self.trainer is not None:
             lr = self.trainer.lr
         else:
-            lr = float(self.scheduler.get_last_lr()[0])
+            raise MissingTrainerException(
+                "You should assign a scheduler or trainer to your PyroModule before calling .get_current_lr"
+            )
         return dict(lr=lr)
 
     def _is_compiled(self):
@@ -211,7 +227,7 @@ class PyroModule(WithHyperParameters, Callback, nn.Module):
         if not strict:
             warnings.warn(f"Missing layers: {missing}\nUnexpected layers: {unexpected}")
 
-    def load_optimizers(self, folder: Path | str, map_location: str = "cpu"):
+    def load_optimizers(self, folder: Path | str, device: str = "cpu"):
         # TODO: after loading the optimizers, what to do during configure_optimizers?
         # One call => don't care
         # Second call => execute ??
@@ -228,7 +244,7 @@ class PyroModule(WithHyperParameters, Callback, nn.Module):
             optim: nn.Module = Class(*args, **kwargs)
             optim.load_state_dict(kwargs)
 
-        state = torch.load(f, map_location=map_location)
+        state = st.load_file(f, device=device)
         self.optimizer = load_optim(state, "optimizer", self.parameters())
         if hasattr(self, "scheduler"):
             if "scheduler" not in state:
