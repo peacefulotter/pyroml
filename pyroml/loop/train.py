@@ -1,5 +1,5 @@
 import warnings
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import torch
 from torch.utils.data import Dataset
@@ -57,10 +57,12 @@ class TrainLoop(Loop):
         return self.trainer.num_workers
 
     def evaluate(self):
-        self.trainer.evaluate(model=self.model, dataset=self.ev_dataset)
+        self.trainer._evaluate_from_train(
+            model=self.model, dataset=self.ev_dataset, epoch=self.epoch
+        )
 
     @override
-    def on_train_iter_end(self):
+    def on_train_iter_end(self, _):
         if (
             self.evaluate_enabled
             and self.trainer.evaluate_on == "step"

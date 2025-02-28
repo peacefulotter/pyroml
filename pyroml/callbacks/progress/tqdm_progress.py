@@ -34,6 +34,9 @@ class TQDMProgress(BaseProgress):
         super().__init__(stack_bars=stack_bars, rich_colors=False)
         self.bars: dict[int, "TqdmType"] = {}
 
+    def _bar_exists(self, task: int):
+        return task in self.bars and self.bars[task] is not None
+
     @override
     def setup(self) -> None:
         self.bars = {}
@@ -54,6 +57,9 @@ class TQDMProgress(BaseProgress):
 
     @override
     def reset_task(self, task: int, total: int, desc: Optional[str] = None):
+        if not self._bar_exists(task):
+            return
+
         bar = self.bars[task]
         bar.reset(total)
         bar.initial = 0
@@ -61,6 +67,9 @@ class TQDMProgress(BaseProgress):
 
     @override
     def end_progress_task(self, task: int, hide: bool = False):
+        if not self._bar_exists(task):
+            return
+
         bar = self.bars[task]
         # bar.leave = hide
         bar.close()
@@ -78,6 +87,9 @@ class TQDMProgress(BaseProgress):
         metrics: dict[str, float],
         advance: int = 1,
     ):
+        if not self._bar_exists(task):
+            return
+
         bar = self.bars[task]
         bar.set_postfix(metrics)
         bar.update(n=advance)

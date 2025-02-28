@@ -157,8 +157,6 @@ class Trainer(WithHyperParameters):
         self.eval_max_steps = eval_max_steps
 
         # Model
-        self.dtype = dtype
-        self.device = device
         self.compile = compile
         self.version = -1
         self.model: Optional["PyroModule" | torch._dynamo.OptimizedModule] = None
@@ -173,13 +171,21 @@ class Trainer(WithHyperParameters):
         self.log_level = log_level
 
         # Device and dtypes
-        self.autocast: Autocast = Autocast(self)
+        self.autocast: Autocast = Autocast(device=device, dtype=dtype)
         self.auto_move: bool = auto_move
         self.pin_memory: Optional[bool] = pin_memory
 
         self._status_stack: list["Status"] = []
 
         self.tracker: MetricsTracker = MetricsTracker()
+
+    @property
+    def dtype(self):
+        return self.autocast.dtype
+
+    @property
+    def device(self):
+        return self.autocast.device
 
     @property
     def current_status(self) -> Optional["Status"]:
@@ -246,6 +252,12 @@ class Trainer(WithHyperParameters):
         return self._call_loop(
             Loop=TrainLoop, model=model, dataset=tr_dataset, ev_dataset=ev_dataset
         )
+
+    # TODO: Not a fan of this, might want to find a different way of changing loop status based on train epoch
+    def _evaluate_from_train(
+        self, model: "PyroModule", dataset: Dataset, epoch: int
+    ) -> "MetricsTracker":
+        return self._call_loop(Loop=EvalLoop, model=model, dataset=dataset, epoch=epoch)
 
     def evaluate(self, model: "PyroModule", dataset: Dataset) -> "MetricsTracker":
         return self._call_loop(Loop=EvalLoop, model=model, dataset=dataset)

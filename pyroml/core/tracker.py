@@ -103,7 +103,6 @@ class MetricsTracker(Callback):
     # =================== epoch_end ===================
 
     def _on_epoch_end(self, args: "CallbackArgs"):
-        print("_on_epoch_end", args)
         """
         Compute epoch metrics as the average over the current epoch
         """
@@ -220,7 +219,7 @@ class MetricsTracker(Callback):
             stage_records = records[records["stage"] == _stage]
 
             subfig.suptitle(_stage.capitalize(), fontweight="bold")
-            axs = subfig.subplots(nrows=1, ncols=ncols)
+            axs = subfig.subplots(nrows=1, ncols=ncols, squeeze=False)
             prev_ax = axs[0]
             for _ax, k in zip(axs, plot_keys):
                 title = with_epoch_prefix(k) if epoch else k

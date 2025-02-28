@@ -37,16 +37,14 @@ class MissingTrainerException(Exception):
     pass
 
 
-class PyroModule(WithHyperParameters, Callback, nn.Module):
+class PyroModule(nn.Module, Callback, WithHyperParameters):
     def __init__(self) -> None:
-        super().__init__(hparams_file=MODEL_HPARAMS_FILE)
+        nn.Module.__init__(self)
+        Callback.__init__(self)
+        WithHyperParameters.__init__(self, hparams_file=MODEL_HPARAMS_FILE)
         self.trainer: Optional["Trainer"] = None
         self.optimizer: Optional[Optimizer] = None
         self.scheduler: Optional[Scheduler] = None
-
-    @property
-    def device(self):
-        return next(self.parameters()).device
 
     def configure_optimizers(self, loop: "Loop"):
         """

@@ -6,26 +6,26 @@ import torch
 from pyroml.utils.log import get_logger
 
 if TYPE_CHECKING:
-    from pyroml.core.trainer import Trainer
+    pass
 
 
 log = get_logger(__name__)
 
 
 class Autocast(AbstractContextManager):
-    def __init__(self, trainer: "Trainer") -> None:
-        device_type = trainer.device
+    def __init__(self, device: torch.device | str, dtype: torch.dtype) -> None:
+        device_type = device
         if device_type == "auto":
             device_type = "cuda" if torch.cuda.is_available() else "cpu"
 
-        if device_type == "cpu" and trainer.dtype != torch.bfloat16:
+        if str(device_type) == "cpu" and dtype != torch.bfloat16:
             self.ctx = nullcontext()
             self.dtype = torch.float32
             msg = "Autocast is not supported on CPU with dtype != then bfloat16, data and model won't be casted automatically"
             log.warning(msg, stacklevel=2)
         else:
-            self.ctx = torch.autocast(device_type=str(device_type), dtype=trainer.dtype)
-            self.dtype = trainer.dtype
+            self.ctx = torch.autocast(device_type=str(device_type), dtype=dtype)
+            self.dtype = dtype
 
         self.device = torch.device(device=device_type)
 

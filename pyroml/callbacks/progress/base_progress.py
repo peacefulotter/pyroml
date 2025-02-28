@@ -69,23 +69,6 @@ class BaseProgress(Callback):
 
     # =================== internal api ===================
 
-    def _add_stage(
-        self,
-        loop: "Loop",
-        desc: Optional[str] = None,
-    ):
-        assert self.enabled
-        log.debug(f"Adding stage {loop.stage.value}")
-
-        total = len(loop.loader)
-        task = self.get_task(loop)
-
-        if task is not None:
-            self.reset_task(task, total, desc)
-        else:
-            task_id = self.add_task(loop, total, desc)
-            self.set_task(loop, task_id)
-
     def _get_step_metrics(self, args: "CallbackArgs"):
         metrics = args.trainer.tracker.get_last_step_metrics()
         if args.loop.stage == Stage.TRAIN:
@@ -133,8 +116,20 @@ class BaseProgress(Callback):
     # =================== epoch_start ===================
 
     def _on_epoch_start(self, desc: str, color: ColorMode, args: "CallbackArgs"):
+        assert self.enabled
+
+        loop = args.loop
+        log.debug(f"Adding stage {loop.stage.value}")
         desc = f"[{color.value}]{desc}" if self.rich_colors else desc
-        self._add_stage(loop=args.loop, desc=desc)
+
+        total = len(loop.loader)
+        task = self.get_task(loop)
+
+        if task is not None:
+            self.reset_task(task, total, desc)
+        else:
+            task_id = self.add_task(loop, total, desc)
+            self.set_task(loop, task_id)
 
     @override
     def on_train_epoch_start(self, args: "CallbackArgs"):

@@ -1,9 +1,9 @@
-from typing import TYPE_CHECKING, Any, Callable, Dict, Tuple, Type, Union
 import warnings
+from typing import TYPE_CHECKING, Any, Callable, Dict, Tuple, Type, Union
 
 import torch
 import torch.utils.data._utils.collate
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 from pyroml.core.stage import Stage
 from pyroml.loop.eval import EvalLoop
@@ -46,14 +46,14 @@ class PredictLoop(EvalLoop):
         loader = DataLoader(self.dataset, batch_size=1)
         batch = next(iter(loader))
         if self.trainer.auto_move:
-            batch = to_device(batch, device=self.trainer.device)
+            batch = to_device(batch, device=self.device)
 
         with torch.no_grad():
             preds = self.model.step(batch, stage=self.stage)
 
         if isinstance(preds, torch.Tensor):
             size = (len(self.dataset), *preds.shape[1:])
-            self.predictions = torch.empty(size, device=self.trainer.device)
+            self.predictions = torch.empty(size, device=self.device)
         else:
             warnings.warn(
                 "Your model step method did not return a tensor during prediction, we thus cannot predict the final predictions shape which might be much slower"

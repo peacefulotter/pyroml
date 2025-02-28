@@ -82,10 +82,6 @@ class FalconLoss(nn.Module, Callback):
         main_str += ")"
         return main_str
 
-    @property
-    def device(self):
-        return self.model.device
-
     def compute_assignment_from_cost(self, cost: torch.Tensor):
         return compute_assignment_from_cost(
             cost.cpu().numpy(),

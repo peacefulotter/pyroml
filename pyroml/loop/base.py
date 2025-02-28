@@ -21,6 +21,7 @@ class Loop(Callback, Status):
     def __init__(
         self, trainer: "Trainer", model: "PyroModule", dataset: Dataset
     ) -> None:
+        Callback.__init__(self)
         Status.__init__(self)
         self.trainer = trainer
         self.model = model
@@ -97,7 +98,6 @@ class Loop(Callback, Status):
         self, hook_name: str, stage_independent: bool = False
     ) -> None:
         args = self._get_callback_args()
-        print(hook_name, self, args.loop)
         hook_name = (
             f"on{'' if stage_independent else '_' + self.stage.value}_{hook_name}"
         )
@@ -118,16 +118,16 @@ class Loop(Callback, Status):
     def _run(self):
         data_iter = iter(self.loader)
 
-        if self.model.device != self.device:
-            self.model.to(self.device)
+        self.model.to(self.device)
 
         self._trigger_callback("start")
         self._trigger_callback("epoch_start")
 
         while True:
+            # TODO: not a fan of this condition and calling epoch end that way, seems hacky
             if self.step > self.total_steps:
                 # Reached the end of an epoch implicitely (without exception from requesting the next batch)
-                if self.step % len(self.loader) == 0:
+                if self.step % len(self.loader) == 1:
                     self._trigger_callback("epoch_end")
                 break
 
