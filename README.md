@@ -28,11 +28,16 @@ import pyroml as p
 class MySOTAModel(p.PyroModule):
     def __init__(self):
         super().__init__()
+        self.model = torch.nn.Linear(16, 1)
         self.loss_fn = torch.nn.MyLossFunction()
 
+    # As you would do in your nn.Module class
+    def forward(self, x):
+        return self.model(x)
+
     # Optionally, configure your own optimizer and scheduler, see more in the docs
-    def configure_optimizers(self, _):
-        self.optimizer = torch.optim.AdamW(self.parameters(), lr=tr.lr)
+    def configure_optimizers(self, args):
+        self.optimizer = torch.optim.AdamW(self.parameters(), lr=args.trainer.lr)
         self.scheduler = torch.optim.lr_scheduler.StepLR(
             self.optimizer, step_size=1, gamma=0.99
         )
