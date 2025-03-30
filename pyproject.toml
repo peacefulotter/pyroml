@@ -28,16 +28,16 @@ dev = ["pre-commit>=4.1.0", "ruff>=0.9.7"]
 [project.optional-dependencies]
 cpu = ["torch>=2.6.0", "torchvision>=0.21.0"]
 cu124 = ["torch>=2.6.0", "torchvision>=0.21.0"]
-dev = ["ipykernel", "ipywidgets"]
-test = ["pytest"]
+dev = ["ipykernel (>=6.29.5)", "ipywidgets (>=8.1.5)"]
+test = ["pytest (>=8.3.4)"]
 extra = [
-    "wandb",
-    "torch-ema",
-    "timm",
-    "einops",
-    "gurobipy",
-    "scipy",
-    "scikit-learn",
+    "wandb (>=0.19.6)",
+    "torch-ema (>=0.3)",
+    "timm (>=1.0.14)",
+    "einops (>=0.8.0)",
+    "gurobipy (>=12.0.1)",
+    "scipy (>=1.15.1)",
+    "scikit-learn (>=1.6.1)",
 ]
 full = ["pyroml[cu124,dev,test,extra]"]
 
@@ -84,53 +84,3 @@ explicit = true
 name = 'pytorch-cu124'
 url = "https://download.pytorch.org/whl/cu124"
 explicit = true
-
-# ========================== poetry ==========================
-
-[tool.poetry.dependencies]
-python = "^3.10"
-
-[tool.poetry.extras]
-cpu = ["torch", "torchvision"]
-cuda = ["torch", "torchvision"]
-
-[tool.poetry.group.cpu]
-optional = true
-
-[tool.poetry.group.cpu.dependencies]
-torch = { version = "^2.6.0", source = "pytorch-cpu", markers = "extra!='cuda'" }
-torchvision = { version = "^0.21.0", source = "pytorch-cpu", markers = "extra!='cuda'" }
-
-[tool.poetry.group.cuda]
-optional = true
-
-[tool.poetry.group.cuda.dependencies]
-torch = { version = "^2.6.0", source = "pytorch-cu124", markers = "extra=='cuda' and extra!='cpu'" }
-torchvision = { version = "^0.21.0", source = "pytorch-cu124", markers = "extra=='cuda' and extra!='cpu'" }
-
-[[tool.poetry.source]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-priority = "explicit"
-
-[[tool.poetry.source]]
-name = "pytorch-cu124"
-url = "https://download.pytorch.org/whl/cu124"
-priority = "explicit"
-
-
-[tool.poetry.group.dev.dependencies]
-ipykernel = "^6.29.5"
-ipywidgets = "^8.1.5"
-
-[tool.poetry.group.test.dependencies]
-pytest = "^8.3.4"
-
-[tool.poetry.group.extra.dependencies]
-wandb = "^0.19.6"
-torch-ema = "^0.3"
-timm = "^1.0.14"
-einops = "^0.8.0"
-gurobipy = "^12.0.1"
-scipy = "^1.15.1"
-scikit-learn = "^1.6.1"
