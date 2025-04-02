@@ -17,7 +17,7 @@ urls = { github = "https://github.com/peacefulotter/pyroml" }
 dependencies = [
     "torchmetrics (>=1.6.1,<2.0.0)",
     "datasets (>=3.2.0,<4.0.0)",
-    "rich (>=13.9.4,<14.0.0)",
+    "rich (>=14.0.0,<14.1.0)",
     "matplotlib (>=3.10.0,<4.0.0)",
     "safetensors (>=0.5.2,<0.6.0)",
 ]
